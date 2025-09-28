@@ -1,0 +1,352 @@
+# -*- coding: utf-8 -*-
+import sys
+from PyQt5.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QGroupBox,
+    QPushButton, QLabel, QLineEdit, QDockWidget, QFrame, QMessageBox,
+    QHBoxLayout, QSpinBox, QDialog, QComboBox
+)
+from PyQt5.QtCore import Qt, pyqtSlot
+from canvas import Canvas
+from widgets.control_panel import ControlPanel
+from controllers.main_controller import MainController
+
+'''父节点选择对话框'''
+class ParentNodeDialog(QDialog):
+    def __init__(self, parent=None, available_nodes=None):
+        super().__init__(parent)
+        self.setWindowTitle("添加节点")
+        self.setModal(True)
+        self.resize(300, 150)
+        
+        layout = QVBoxLayout()
+        
+        # 说明文字
+        label = QLabel("选择添加节点的父节点：")
+        layout.addWidget(label)
+        
+        # 下拉选择框
+        self.combo_box = QComboBox()
+        if available_nodes:
+            for node_value in available_nodes:
+                self.combo_box.addItem(str(node_value))
+        layout.addWidget(self.combo_box)
+        
+        # 按钮
+        button_layout = QHBoxLayout()
+        ok_button = QPushButton("确定")
+        cancel_button = QPushButton("取消")
+        
+        ok_button.clicked.connect(self.accept)
+        cancel_button.clicked.connect(self.reject)
+        
+        button_layout.addWidget(ok_button)
+        button_layout.addWidget(cancel_button)
+        layout.addLayout(button_layout)
+        
+        self.setLayout(layout)
+    
+    def get_selected_parent(self):
+        return self.combo_box.currentText()
+
+'''初始化整体UI 主窗口类'''
+class MainWindow(QMainWindow):
+    '''view层'''
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("数据结构可视化模拟器")
+        self.resize(1280, 820)
+
+        # central canvas
+        self.canvas = Canvas(self)
+        self.setCentralWidget(self.canvas.view)
+
+        # status bar
+        self.mode_label = QLabel("准备就绪")
+        self.statusBar().addPermanentWidget(self.mode_label, 1)
+
+        # left dock
+        self.left_dock = QDockWidget("操作", self)
+        self.left_dock.setAllowedAreas(Qt.LeftDockWidgetArea)
+        left_widget = QWidget()
+        self.left_layout = QVBoxLayout(left_widget)
+        self.left_layout.setContentsMargins(8, 8, 8, 8)
+        self._build_left_panel()
+        self.left_dock.setWidget(left_widget)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.left_dock)
+
+        # control panel
+        self.ctrl_panel = ControlPanel()
+        self.addDockWidget(Qt.BottomDockWidgetArea, self.ctrl_panel)
+
+        # 初始化控制器
+        '''控制器层'''
+        self.controller = MainController()
+        
+        # 连接控制器信号
+        self.controller.snapshot_updated.connect(self.canvas.render_snapshot)
+        self.controller.hint_updated.connect(self.mode_label.setText)
+        self.controller.parent_selection_requested.connect(self._handle_parent_selection_request)
+
+        # 选择默认数据结构
+        self.select_structure("SequentialList")
+
+        # wire control panel
+        self.ctrl_panel.playClicked.connect(self.canvas.animator_play)
+        self.ctrl_panel.pauseClicked.connect(self.canvas.animator_pause)
+        self.ctrl_panel.stepClicked.connect(self.canvas.animator_step)
+        self.ctrl_panel.speedChanged.connect(self.canvas.animator_speed)
+
+    '''左侧分组按钮（顺序表/链表/栈/树/BST/哈夫曼）及其点击事件绑定到 select_structure(...)'''
+    def _build_left_panel(self):
+    # —— 线性表 —— #
+        group_list = QGroupBox("线性表")
+        gl = QVBoxLayout(group_list)
+
+        btn_seq = QPushButton("顺序表 SequentialList")
+        btn_seq.clicked.connect(lambda: self.select_structure("SequentialList"))
+        gl.addWidget(btn_seq)
+
+        btn_ll = QPushButton("链表 LinkedList")
+        btn_ll.clicked.connect(lambda: self.select_structure("LinkedList"))
+        gl.addWidget(btn_ll)
+
+    # —— 栈 —— #
+        group_stack = QGroupBox("栈")
+        gs = QVBoxLayout(group_stack)
+
+        btn_stack = QPushButton("栈 Stack")
+        btn_stack.clicked.connect(lambda: self.select_structure("Stack"))
+        gs.addWidget(btn_stack)
+
+    # —— 树 —— #
+        group_tree = QGroupBox("树")
+        gt = QVBoxLayout(group_tree)
+
+        btn_bt = QPushButton("链式二叉树 BinaryTree")
+        btn_bt.clicked.connect(lambda: self.select_structure("BinaryTree"))
+        gt.addWidget(btn_bt)
+
+        btn_bst = QPushButton("二叉搜索树 BST")
+        btn_bst.clicked.connect(lambda: self.select_structure("BST"))
+        gt.addWidget(btn_bst)
+
+        btn_hf = QPushButton("哈夫曼树 HuffmanTree")
+        btn_hf.clicked.connect(lambda: self.select_structure("HuffmanTree"))
+        gt.addWidget(btn_hf)
+
+    # —— 动态操作区域容器 —— #
+        self.dynamic_container = QFrame()
+        self.dynamic_container.setFrameShape(QFrame.StyledPanel)
+        self.dynamic_layout = QVBoxLayout(self.dynamic_container)
+        self.dynamic_layout.setContentsMargins(8, 8, 8, 8)
+
+    # 左侧栏组合
+        self.left_layout.addWidget(group_list)
+        self.left_layout.addWidget(group_stack)
+        self.left_layout.addWidget(group_tree)
+        self.left_layout.addWidget(self.dynamic_container, 1)
+        self.left_layout.addStretch(1)
+
+    def _clear_dynamic_panel(self):
+        while self.dynamic_layout.count():
+            item = self.dynamic_layout.takeAt(0)
+            w = item.widget()
+            if w:
+                w.deleteLater()
+
+    def _make_dynamic_panel_for(self, key: str):
+        self._clear_dynamic_panel()
+        box = QGroupBox(f"{key} 操作")
+        lay = QVBoxLayout(box)
+
+        input_line = QLineEdit()
+        input_line.setPlaceholderText("输入一个值，例如 42")
+
+        def get_value():
+            text = input_line.text().strip()
+            if text == "":
+                QMessageBox.warning(self, "提示", "请输入一个值")
+                return None
+            return text
+
+        if key == "SequentialList":
+            build_line = QLineEdit()
+            build_line.setPlaceholderText("初始数据：如 1,2,3,4")
+            lay.addWidget(build_line)
+            btn_build = QPushButton("构建")
+            def build_seq():
+                self.controller.build_sequential_list(build_line.text().strip())
+            btn_build.clicked.connect(build_seq)
+            lay.addWidget(btn_build)
+
+            h1 = QHBoxLayout()
+            pos_in = QSpinBox(); pos_in.setRange(0, 9999); pos_in.setPrefix("位置 ")
+            val_in = QLineEdit(); val_in.setPlaceholderText("值")
+            btn_ins = QPushButton("按位插入")
+            def do_ins():
+                self.controller.insert_at_sequential_list(pos_in.value(), val_in.text().strip())
+            btn_ins.clicked.connect(do_ins)
+            for wdg in (pos_in, val_in, btn_ins): h1.addWidget(wdg)
+            lay.addLayout(h1)
+
+            h2 = QHBoxLayout()
+            pos_del = QSpinBox(); pos_del.setRange(0, 9999); pos_del.setPrefix("位置 ")
+            btn_del = QPushButton("按位删除")
+            btn_del.clicked.connect(lambda: self.controller.delete_at_sequential_list(pos_del.value()))
+            h2.addWidget(pos_del); h2.addWidget(btn_del)
+            lay.addLayout(h2)
+
+            # 头部和尾部插入按钮
+            h3 = QHBoxLayout()
+            btn_head = QPushButton("在头部插入")
+            btn_head.clicked.connect(lambda: self.controller.insert_at_head_sequential_list(val_in.text().strip()))
+            btn_tail = QPushButton("在尾部插入")
+            btn_tail.clicked.connect(lambda: self.controller.insert_at_tail_sequential_list(val_in.text().strip()))
+            h3.addWidget(btn_head)
+            h3.addWidget(btn_tail)
+            lay.addLayout(h3)
+
+        elif key == "LinkedList":
+            # 添加构建功能
+            build_line = QLineEdit()
+            build_line.setPlaceholderText("初始数据：如 1,2,3,4")
+            lay.addWidget(build_line)
+            btn_build = QPushButton("构建")
+            def build_ll():
+                self.controller.build_linked_list(build_line.text().strip())
+            btn_build.clicked.connect(build_ll)
+            lay.addWidget(btn_build)
+
+            # 按位插入
+            h1 = QHBoxLayout()
+            pos_in = QSpinBox(); pos_in.setRange(0, 9999); pos_in.setPrefix("位置 ")
+            val_in = QLineEdit(); val_in.setPlaceholderText("值")
+            btn_ins = QPushButton("按位插入")
+            def do_ins():
+                self.controller.insert_at_linked_list(pos_in.value(), val_in.text().strip())
+            btn_ins.clicked.connect(do_ins)
+            for wdg in (pos_in, val_in, btn_ins): h1.addWidget(wdg)
+            lay.addLayout(h1)
+
+            # 按位删除
+            h2 = QHBoxLayout()
+            pos_del = QSpinBox(); pos_del.setRange(0, 9999); pos_del.setPrefix("位置 ")
+            btn_del = QPushButton("按位删除")
+            btn_del.clicked.connect(lambda: self.controller.delete_at_linked_list(pos_del.value()))
+            h2.addWidget(pos_del); h2.addWidget(btn_del)
+            lay.addLayout(h2)
+
+            # 头部和尾部插入
+            h3 = QHBoxLayout()
+            btn_head = QPushButton("在头部插入")
+            btn_head.clicked.connect(lambda: self.controller.insert_at_head_linked_list(val_in.text().strip()))
+            btn_tail = QPushButton("在尾部插入")
+            btn_tail.clicked.connect(lambda: self.controller.insert_at_tail_linked_list(val_in.text().strip()))
+            h3.addWidget(btn_head)
+            h3.addWidget(btn_tail)
+            lay.addLayout(h3)
+
+            # 按值删除
+            lay.addWidget(input_line)
+            b1 = QPushButton("按值删除")
+            b1.clicked.connect(lambda: self.controller.delete_by_value_linked_list(get_value()))
+            lay.addWidget(b1)
+
+        elif key == "Stack":
+            lay.addWidget(input_line)
+            b1 = QPushButton("Push")
+            b1.clicked.connect(lambda: self.controller.push_stack(get_value()))
+            b2 = QPushButton("Pop")
+            b2.clicked.connect(lambda: self.controller.pop_stack())
+            b3 = QPushButton("Clear Stack")
+            b3.clicked.connect(lambda: self.controller.clear_stack())
+            lay.addWidget(b1); lay.addWidget(b2); lay.addWidget(b3)
+
+        elif key == "BinaryTree":
+            lay.addWidget(input_line)
+            b1 = QPushButton("插入节点")
+            b1.clicked.connect(lambda: self._insert_binary_tree_node(get_value()))
+            b2 = QPushButton("前序遍历")
+            b2.clicked.connect(lambda: self.controller.traverse_binary_tree("pre"))
+            b3 = QPushButton("中序遍历")
+            b3.clicked.connect(lambda: self.controller.traverse_binary_tree("in"))
+            b4 = QPushButton("后序遍历")
+            b4.clicked.connect(lambda: self.controller.traverse_binary_tree("post"))
+            for b in (b1,b2,b3,b4): lay.addWidget(b)
+
+        elif key == "BST":
+            lay.addWidget(input_line)
+            b1 = QPushButton("插入")
+            b1.clicked.connect(lambda: self.controller.insert_bst(get_value()))
+            b2 = QPushButton("查找")
+            b2.clicked.connect(lambda: self.controller.search_bst(get_value()))
+            b3 = QPushButton("删除")
+            b3.clicked.connect(lambda: self.controller.delete_bst(get_value()))
+            for b in (b1,b2,b3): lay.addWidget(b)
+
+        elif key == "HuffmanTree":
+            line = QLineEdit()
+            line.setPlaceholderText('输入频率映射，如: a:5,b:7,c:2')
+            lay.addWidget(line)
+            b1 = QPushButton("构建哈夫曼树")
+            def build():
+                self.controller.build_huffman_tree(line.text().strip())
+            b1.clicked.connect(build)
+            lay.addWidget(b1)
+
+        self.dynamic_layout.addWidget(box)
+
+    @pyqtSlot()
+    def select_structure(self, key: str):
+        self.controller.select_structure(key)
+        self._make_dynamic_panel_for(key)
+
+    def _insert_binary_tree_node(self, value):
+        """处理二叉树节点插入"""
+        try:
+            if not value:
+                QMessageBox.warning(self, "提示", "请输入一个值")
+                return
+            
+            # 获取当前数据结构
+            structure = self.controller.structures.get("BinaryTree")
+            if not structure:
+                return
+            
+            # 如果没有根节点，自动创建一个
+            if structure.root is None:
+                structure.create_root_node(value)
+                self.controller._update_snapshot()
+                return
+            
+            # 获取所有现有节点的值
+            available_nodes = structure.get_all_node_values()
+            
+            if not available_nodes:
+                QMessageBox.warning(self, "错误", "无法获取现有节点信息")
+                return
+            
+            # 显示父节点选择对话框
+            dialog = ParentNodeDialog(self, available_nodes)
+            if dialog.exec_() == QDialog.Accepted:
+                parent_value = dialog.get_selected_parent()
+                if parent_value:
+                    self.controller.insert_binary_tree_node(value, parent_value)
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"插入节点时发生错误：{str(e)}")
+            print(f"Error in _insert_binary_tree_node: {e}")
+
+    def _handle_parent_selection_request(self, value):
+        """处理父节点选择请求"""
+        # 这个方法会被控制器调用，用于处理需要用户选择父节点的情况
+        # 这里可以显示一个对话框让用户选择父节点
+        pass
+
+def main():
+    app = QApplication(sys.argv)
+    win = MainWindow()
+    win.show()
+    sys.exit(app.exec_())
+
+if __name__ == "__main__":
+    main()
