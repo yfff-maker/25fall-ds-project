@@ -33,7 +33,7 @@ class BinaryTreeModel(BaseStructure):
         """创建根节点"""
         if not self.active or value is None:
             return
-        
+            
         # 直接创建根节点
         self.root = BinaryTreeModel.Node(value)
 

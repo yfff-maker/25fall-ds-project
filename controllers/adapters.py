@@ -881,135 +881,140 @@ class StackAdapter:
         return snapshot
 
 class BinaryTreeAdapter:
-    """二叉树适配器"""
+    """改进的二叉树适配器 - 使用递归子树宽度计算"""
     
     @staticmethod
-    def _get_node_position(node, binary_tree, start_x, y, level_height, node_spacing):
-        """计算节点的实际位置"""
-        if not node or not binary_tree.root:
-            return start_x, y
-        
-        # 使用层序遍历找到节点位置
-        queue = [(binary_tree.root, start_x, y, 0)]
-        level = 0
-        
-        while queue:
-            next_queue = []
-            level_width = node_spacing * (2 ** level)
-            
-            for current_node, x, current_y, current_level in queue:
-                if current_node == node:
-                    return x, current_y
-                
-                if current_node:
-                    # 计算子节点位置
-                    child_spacing = level_width / (2 ** (current_level + 1))
-                    left_x = x - child_spacing
-                    right_x = x + child_spacing
-                    child_y = current_y + level_height
-                    
-                    # 添加子节点到下一层队列
-                    next_queue.append((current_node.left, left_x, child_y, current_level + 1))
-                    next_queue.append((current_node.right, right_x, child_y, current_level + 1))
-            
-            queue = next_queue
-            level += 1
-        
-        return start_x, y
-    
-    @staticmethod
-    def _calculate_positions(node, x, y, level_height, positions, level=0):
-        """递归计算节点位置，确保不重叠 - 按照用户描述的布局方案"""
+    def _calculate_subtree_width(node, node_width=60, min_spacing=20):
+        """递归计算子树所需的最小宽度"""
         if not node:
-            return
+            return 0
         
-        # 存储当前节点位置
-        positions[node] = (x, y)
+        if not node.left and not node.right:
+            # 叶子节点只需要自身宽度
+            return node_width
+        
+        # 计算左右子树宽度
+        left_width = BinaryTreeAdapter._calculate_subtree_width(
+            node.left, node_width, min_spacing)
+        right_width = BinaryTreeAdapter._calculate_subtree_width(
+            node.right, node_width, min_spacing)
+        
+        # 当前节点需要的总宽度 = max(自身宽度, 左子树宽度 + 右子树宽度 + 间距)
+        subtree_total_width = left_width + right_width
+        if left_width > 0 and right_width > 0:
+            subtree_total_width += min_spacing
+        
+        return max(node_width, subtree_total_width)
+    
+    @staticmethod
+    def _layout_tree(node, center_x, y, level_height=80, node_width=60, min_spacing=20):
+        """递归布局二叉树，确保子树不重叠"""
+        if not node:
+            return {}
+        
+        positions = {}
+        
+        # 当前节点位置
+        positions[node] = (center_x, y)
+        
+        if not node.left and not node.right:
+            # 叶子节点，直接返回
+            return positions
+        
+        # 计算左右子树需要的宽度
+        left_width = BinaryTreeAdapter._calculate_subtree_width(
+            node.left, node_width, min_spacing)
+        right_width = BinaryTreeAdapter._calculate_subtree_width(
+            node.right, node_width, min_spacing)
         
         # 计算子节点位置
-        # 水平间距根据层级递减，确保不重叠
-        # 第1层：200px间距，第2层：170px，第3层：140px，最小80px
-        horizontal_spacing = max(200 - level * 30, 80)
+        if node.left and node.right:
+            # 两个子节点
+            total_child_width = left_width + right_width + min_spacing
+            left_center = center_x - total_child_width / 2 + left_width / 2
+            right_center = center_x + total_child_width / 2 - right_width / 2
+            
+            # 递归布局子树
+            left_positions = BinaryTreeAdapter._layout_tree(
+                node.left, left_center, y + level_height, level_height, node_width, min_spacing)
+            right_positions = BinaryTreeAdapter._layout_tree(
+                node.right, right_center, y + level_height, level_height, node_width, min_spacing)
+            
+            positions.update(left_positions)
+            positions.update(right_positions)
+            
+        elif node.left:
+            # 只有左子节点
+            left_center = center_x - min_spacing / 2
+            left_positions = BinaryTreeAdapter._layout_tree(
+                node.left, left_center, y + level_height, level_height, node_width, min_spacing)
+            positions.update(left_positions)
+            
+        elif node.right:
+            # 只有右子节点
+            right_center = center_x + min_spacing / 2
+            right_positions = BinaryTreeAdapter._layout_tree(
+                node.right, right_center, y + level_height, level_height, node_width, min_spacing)
+            positions.update(right_positions)
         
-        if node.left:
-            left_x = x - horizontal_spacing
-            left_y = y + level_height
-            BinaryTreeAdapter._calculate_positions(node.left, left_x, left_y, level_height, positions, level + 1)
-        
-        if node.right:
-            right_x = x + horizontal_spacing
-            right_y = y + level_height
-            BinaryTreeAdapter._calculate_positions(node.right, right_x, right_y, level_height, positions, level + 1)
+        return positions
     
     @staticmethod
-    def _add_edges(node, positions, snapshot, animation_state=None, animation_progress=0.0):
-        """递归添加边 - 支持动画效果"""
+    def _add_edges(node, positions, snapshot):
+        """添加树的边连接"""
         if not node:
             return
         
-        node_id = f"node_{id(node)}"
         node_x, node_y = positions[node]
+        node_id = f"node_{id(node)}"
         
-        # 添加左子节点边
+        # 添加到左子节点的边
         if node.left:
-            left_id = f"node_{id(node.left)}"
             left_x, left_y = positions[node.left]
+            left_id = f"node_{id(node.left)}"
             
             edge = EdgeSnapshot(
                 from_id=node_id,
                 to_id=left_id,
+                color="#2E86AB",
                 arrow_type="line"
             )
-            # 添加坐标信息
+            # 设置连线坐标
             edge.from_x = node_x
-            edge.from_y = node_y + 20  # 从节点底部开始
+            edge.from_y = node_y + 20
             edge.to_x = left_x
-            edge.to_y = left_y - 20   # 到子节点顶部
-            edge.color = "#4C78A8"    # 蓝色边
-            
-            # 如果是新插入的边，添加动画效果
-            if (animation_state == 'inserting' and 
-                hasattr(node, '_is_new_edge') and node._is_new_edge):
-                # 边从无到有的动画效果
-                edge.color = "#FF6B6B"  # 红色表示新边
-                # 可以在这里添加边的动画效果
+            edge.to_y = left_y - 20
             
             snapshot.edges.append(edge)
             
-            # 递归添加左子树的边
-            BinaryTreeAdapter._add_edges(node.left, positions, snapshot, animation_state, animation_progress)
+            # 递归处理左子树
+            BinaryTreeAdapter._add_edges(node.left, positions, snapshot)
         
-        # 添加右子节点边
+        # 添加到右子节点的边
         if node.right:
-            right_id = f"node_{id(node.right)}"
             right_x, right_y = positions[node.right]
+            right_id = f"node_{id(node.right)}"
             
             edge = EdgeSnapshot(
                 from_id=node_id,
                 to_id=right_id,
+                color="#2E86AB",
                 arrow_type="line"
             )
-            # 添加坐标信息
+            # 设置连线坐标
             edge.from_x = node_x
-            edge.from_y = node_y + 20  # 从节点底部开始
+            edge.from_y = node_y + 20
             edge.to_x = right_x
-            edge.to_y = right_y - 20   # 到子节点顶部
-            edge.color = "#4C78A8"    # 蓝色边
-            
-            # 如果是新插入的边，添加动画效果
-            if (animation_state == 'inserting' and 
-                hasattr(node, '_is_new_edge') and node._is_new_edge):
-                # 边从无到有的动画效果
-                edge.color = "#FF6B6B"  # 红色表示新边
+            edge.to_y = right_y - 20
             
             snapshot.edges.append(edge)
             
-            # 递归添加右子树的边
-            BinaryTreeAdapter._add_edges(node.right, positions, snapshot, animation_state, animation_progress)
+            # 递归处理右子树
+            BinaryTreeAdapter._add_edges(node.right, positions, snapshot)
     
     @staticmethod
-    def to_snapshot(binary_tree, start_x=400, y=100, level_height=120, node_spacing=200) -> StructureSnapshot:
-        """将二叉树转换为快照 - 使用动态布局避免重叠"""
+    def to_snapshot(binary_tree, start_x=400, y=100, level_height=80, node_width=60, min_spacing=20) -> StructureSnapshot:
+        """将二叉树转换为快照 - 使用改进的布局算法"""
         snapshot = StructureSnapshot()
         snapshot.hint_text = f"二叉树 (节点数: {len(binary_tree.get_all_node_values())})"
         
@@ -1017,47 +1022,58 @@ class BinaryTreeAdapter:
         animation_state = getattr(binary_tree, '_animation_state', None)
         animation_progress = getattr(binary_tree, '_animation_progress', 0.0)
         
-        if binary_tree.root:
-             # 只显示根节点，简化显示
-             node_id = f"node_{id(binary_tree.root)}"
-             
-             # 检查是否是动画中的新节点
-             is_new_node = (animation_state == 'inserting' and 
-                           hasattr(binary_tree, '_new_node') and 
-                           binary_tree._new_node == binary_tree.root)
-             
-             if is_new_node:
-                 # 新节点动画效果
-                 target_x, target_y = start_x, y
-                 start_x_anim = start_x
-                 start_y_anim = 50  # 从屏幕上方开始
-                 
-                 # 使用动画进度插值
-                 current_x = start_x_anim + (target_x - start_x_anim) * animation_progress
-                 current_y = start_y_anim + (target_y - start_y_anim) * animation_progress
-                 
-                 node_snapshot = NodeSnapshot(
-                     id=node_id,
-                     value=str(binary_tree.root.value),
-                     x=current_x,
-                     y=current_y,
-                     node_type="box",
-                     width=60,
-                     height=40,
-                     color="#FF6B6B"  # 红色表示正在插入的节点
-                 )
-             else:
-                 node_snapshot = NodeSnapshot(
-                     id=node_id,
-                     value=str(binary_tree.root.value),
-                     x=start_x,
-                     y=y,
-                     node_type="box",
-                     width=60,
-                     height=40
-                 )
-             
-             snapshot.nodes.append(node_snapshot)
+        if not binary_tree.root:
+            return snapshot
+        
+        # 使用改进的布局算法
+        positions = BinaryTreeAdapter._layout_tree(
+            binary_tree.root, start_x, y, level_height, node_width, min_spacing)
+        
+        # 生成节点快照
+        for node, (x, y_pos) in positions.items():
+            node_id = f"node_{id(node)}"
+            
+            # 检查是否是动画中的新节点
+            is_new_node = (animation_state == 'inserting' and 
+                          hasattr(binary_tree, '_new_value') and 
+                          str(binary_tree._new_value) == str(node.value))
+            
+            if is_new_node:
+                # 新节点动画效果
+                target_x, target_y = x, y_pos
+                start_x_anim = x
+                start_y_anim = 50  # 从屏幕上方开始
+                
+                # 使用动画进度插值
+                current_x = start_x_anim + (target_x - start_x_anim) * animation_progress
+                current_y = start_y_anim + (target_y - start_y_anim) * animation_progress
+                
+                node_snapshot = NodeSnapshot(
+                    id=node_id,
+                    value=str(node.value),
+                    x=current_x - 30,  # 节点中心对齐
+                    y=current_y - 20,
+                    node_type="box",
+                    width=60,
+                    height=40,
+                    color="#FF6B6B"  # 红色表示正在插入的节点
+                )
+            else:
+                node_snapshot = NodeSnapshot(
+                    id=node_id,
+                    value=str(node.value),
+                    x=x - 30,  # 节点中心对齐
+                    y=y_pos - 20,
+                    node_type="box",
+                    width=60,
+                    height=40,
+                    color="#E8F4FD"
+                )
+            
+            snapshot.nodes.append(node_snapshot)
+        
+        # 生成边快照
+        BinaryTreeAdapter._add_edges(binary_tree.root, positions, snapshot)
         
         # 显示根指针
         root_pointer_x = start_x - 100
@@ -1073,18 +1089,18 @@ class BinaryTreeAdapter:
         )
         snapshot.boxes.append(root_pointer_box)
         
-         # 添加根指针到根节点的连接
+        # 添加根指针到根节点的连接
         if binary_tree.root:
-             root_edge = EdgeSnapshot(
-                 from_id="root_pointer",
-                 to_id=f"node_{id(binary_tree.root)}",
-                 arrow_type="arrow"
-             )
-             root_edge.from_x = root_pointer_x + 60
-             root_edge.from_y = root_pointer_y + 15
-             root_edge.to_x = start_x - 30
-             root_edge.to_y = y
-             snapshot.edges.append(root_edge)
+            root_edge = EdgeSnapshot(
+                from_id="root_pointer",
+                to_id=f"node_{id(binary_tree.root)}",
+                arrow_type="arrow"
+            )
+            root_edge.from_x = root_pointer_x + 60
+            root_edge.from_y = root_pointer_y + 15
+            root_edge.to_x = start_x - 30
+            root_edge.to_y = y
+            snapshot.edges.append(root_edge)
         
         # 处理创建根节点动画
         if animation_state == 'creating_root':
@@ -1093,9 +1109,6 @@ class BinaryTreeAdapter:
                 # 计算目标位置（根节点位置）
                 target_x = start_x
                 target_y = y
-                
-                # 设置目标位置到二叉树对象
-                binary_tree.set_animation_target(target_x, target_y)
                 
                 # 计算起始位置（屏幕正上方）
                 start_x_pos = target_x
@@ -1106,44 +1119,17 @@ class BinaryTreeAdapter:
                 current_y = start_y_pos + (target_y - start_y_pos) * animation_progress
                 
                 # 创建动画中的根节点
-                node_width = 80
-                node_height = 50
-                
-                # 数据域
-                data_box = BoxSnapshot(
-                    id="animating_root_data",
+                node_snapshot = NodeSnapshot(
+                    id="animating_root",
                     value=str(new_value),
-                    x=current_x - node_width // 2,
-                    y=current_y - node_height // 2,
-                    width=node_width,
-                    height=node_height,
+                    x=current_x - 30,
+                    y=current_y - 20,
+                    node_type="box",
+                    width=60,
+                    height=40,
                     color="#FF6B6B"  # 红色表示正在移动
                 )
-                snapshot.boxes.append(data_box)
-                
-                # 左指针区域
-                left_pointer_box = BoxSnapshot(
-                    id="animating_root_left",
-                    value="NULL",
-                    x=current_x - node_width // 2 - 30,
-                    y=current_y - node_height // 2,
-                    width=25,
-                    height=node_height,
-                    color="#FFB6C1"  # 粉色
-                )
-                snapshot.boxes.append(left_pointer_box)
-                
-                # 右指针区域
-                right_pointer_box = BoxSnapshot(
-                    id="animating_root_right",
-                    value="NULL",
-                    x=current_x + node_width // 2 + 5,
-                    y=current_y - node_height // 2,
-                    width=25,
-                    height=node_height,
-                    color="#FFB6C1"  # 粉色
-                )
-                snapshot.boxes.append(right_pointer_box)
+                snapshot.nodes.append(node_snapshot)
         
         # 处理插入节点动画
         elif animation_state == 'inserting':
@@ -1154,9 +1140,9 @@ class BinaryTreeAdapter:
             if new_value is not None and parent_value is not None:
                 # 找到父节点位置
                 parent_node = binary_tree.find_node_by_value(parent_value)
-                if parent_node:
+                if parent_node and parent_node in positions:
                     # 计算父节点的实际位置
-                    parent_x, parent_y = BinaryTreeAdapter._get_node_position(parent_node, binary_tree, start_x, y, level_height, node_spacing)
+                    parent_x, parent_y = positions[parent_node]
                     
                     # 计算目标位置（子节点位置）
                     if insert_position == 'left':
@@ -1164,9 +1150,6 @@ class BinaryTreeAdapter:
                     else:  # right
                         target_x = parent_x + 100
                     target_y = parent_y + level_height
-                    
-                    # 设置目标位置到二叉树对象
-                    binary_tree.set_animation_target(target_x, target_y)
                     
                     # 计算起始位置（屏幕正上方）
                     start_x_pos = target_x
@@ -1177,46 +1160,20 @@ class BinaryTreeAdapter:
                     current_y = start_y_pos + (target_y - start_y_pos) * animation_progress
                     
                     # 创建动画中的新节点
-                    node_width = 80
-                    node_height = 50
-                    
-                    # 数据域
-                    data_box = BoxSnapshot(
-                        id="animating_insert_data",
+                    node_snapshot = NodeSnapshot(
+                        id="animating_insert",
                         value=str(new_value),
-                        x=current_x - node_width // 2,
-                        y=current_y - node_height // 2,
-                        width=node_width,
-                        height=node_height,
+                        x=current_x - 30,
+                        y=current_y - 20,
+                        node_type="box",
+                        width=60,
+                        height=40,
                         color="#FF6B6B"  # 红色表示正在移动
                     )
-                    snapshot.boxes.append(data_box)
-                    
-                    # 左指针区域
-                    left_pointer_box = BoxSnapshot(
-                        id="animating_insert_left",
-                        value="NULL",
-                        x=current_x - node_width // 2 - 30,
-                        y=current_y - node_height // 2,
-                        width=25,
-                        height=node_height,
-                        color="#FFB6C1"  # 粉色
-                    )
-                    snapshot.boxes.append(left_pointer_box)
-                    
-                    # 右指针区域
-                    right_pointer_box = BoxSnapshot(
-                        id="animating_insert_right",
-                        value="NULL",
-                        x=current_x + node_width // 2 + 5,
-                        y=current_y - node_height // 2,
-                        width=25,
-                        height=node_height,
-                        color="#FFB6C1"  # 粉色
-                    )
-                    snapshot.boxes.append(right_pointer_box)
+                    snapshot.nodes.append(node_snapshot)
         
         return snapshot
+    
 
 class BSTAdapter:
     """二叉搜索树适配器"""
@@ -1275,59 +1232,315 @@ class BSTAdapter:
         return snapshot
 
 class HuffmanTreeAdapter:
-    """哈夫曼树适配器"""
+    """哈夫曼树适配器 - 支持构建动画"""
     
     @staticmethod
-    def to_snapshot(huffman_tree, start_x=400, y=100, level_height=100, node_spacing=200) -> StructureSnapshot:
-        """将哈夫曼树转换为快照"""
+    def to_snapshot(huffman_tree, start_x=400, y=100, level_height=120, node_spacing=200) -> StructureSnapshot:
+        """将哈夫曼树转换为快照 - 支持构建动画"""
         snapshot = StructureSnapshot()
-        snapshot.hint_text = f"哈夫曼树 (节点数: {len(huffman_tree.get_codes())})"
         
-        if huffman_tree.root:
-            # 使用层序遍历生成节点和边
-            queue = [(huffman_tree.root, start_x, y, None)]
-            level = 0
-            
-            while queue:
-                next_queue = []
-                level_width = node_spacing * (2 ** level)
-                
-                for i, (node, x, y, parent_id) in enumerate(queue):
-                    if node:
-                        node_id = f"node_{id(node)}"
-                        # 显示频率和字符
-                        display_value = f"{node.char}:{node.freq}" if hasattr(node, 'char') else str(node.freq)
-                        node_snapshot = NodeSnapshot(
-                            id=node_id,
-                            value=display_value,
-                            x=x,
-                            y=y,
-                            node_type="box",
-                            width=80,
-                            height=40
-                        )
-                        snapshot.nodes.append(node_snapshot)
-                        
-                        # 添加边到父节点
-                        if parent_id:
-                            edge = EdgeSnapshot(
-                                from_id=parent_id,
-                                to_id=node_id,
-                                arrow_type="line"
-                            )
-                            snapshot.edges.append(edge)
-                        
-                        # 计算子节点位置
-                        child_spacing = level_width / (2 ** (level + 1))
-                        left_x = x - child_spacing
-                        right_x = x + child_spacing
-                        child_y = y + level_height
-                        
-                        # 添加子节点到下一层队列
-                        next_queue.append((node.left, left_x, child_y, node_id))
-                        next_queue.append((node.right, right_x, child_y, node_id))
-                
-                queue = next_queue
-                level += 1
+        # 获取动画状态
+        animation_state = getattr(huffman_tree, '_animation_state', None)
+        animation_progress = getattr(huffman_tree, '_animation_progress', 0.0)
+        build_step = getattr(huffman_tree, '_build_step', 0)
+        freq_map = getattr(huffman_tree, '_original_freq_map', {})
+        
+        if animation_state == 'building' and freq_map:
+            # 显示构建动画
+            snapshot = HuffmanTreeAdapter._create_building_animation_snapshot(
+                huffman_tree, freq_map, build_step, animation_progress, start_x, y, level_height
+            )
+        elif huffman_tree.root:
+            # 显示完整树
+            snapshot = HuffmanTreeAdapter._create_complete_tree_snapshot(
+                huffman_tree, start_x, y, level_height, node_spacing
+            )
+        else:
+            # 显示初始状态
+            snapshot.hint_text = "哈夫曼树 (点击构建开始)"
         
         return snapshot
+    
+    @staticmethod
+    def _create_building_animation_snapshot(huffman_tree, freq_map, build_step, progress, start_x, y, level_height):
+        """创建构建动画快照"""
+        snapshot = StructureSnapshot()
+        snapshot.hint_text = f"哈夫曼树构建中... (步骤 {build_step})"
+        
+        # 显示初始节点（屏幕下方）
+        initial_y = y + 200
+        sorted_items = sorted(freq_map.items(), key=lambda x: x[1])
+        
+        for i, (char, freq) in enumerate(sorted_items):
+            node_x = start_x - 200 + i * 100
+            node_y = initial_y
+            
+            # 检查是否是当前步骤的节点
+            is_highlighted = (build_step == 0 and i < 2) or (build_step > 0 and i < 2)
+            
+            if is_highlighted:
+                # 高亮效果
+                scale = 1.0 + 0.2 * progress
+                color = "#FFD700"  # 金色高亮
+            else:
+                scale = 1.0
+                color = "#FF6B6B"  # 红色叶子节点
+            
+            node_snapshot = NodeSnapshot(
+                id=f"initial_{char}",
+                value=f"{char}:{freq}",
+                x=node_x,
+                y=node_y,
+                node_type="circle",
+                color=color,
+                width=int(40 * scale),
+                height=int(40 * scale)
+            )
+            snapshot.nodes.append(node_snapshot)
+        
+        # 显示已构建的树结构
+        if build_step > 0:
+            HuffmanTreeAdapter._add_built_tree_nodes(huffman_tree, snapshot, start_x, y, level_height, build_step, progress)
+        
+        return snapshot
+    
+    @staticmethod
+    def _add_built_tree_nodes(huffman_tree, snapshot, start_x, y, level_height, build_step, progress):
+        """添加已构建的树节点"""
+        if not huffman_tree.root:
+            return
+        
+        # 使用层序遍历显示已构建的节点
+        queue = [(huffman_tree.root, start_x, y)]
+        level = 0
+        
+        while queue and level < build_step + 1:
+            next_queue = []
+            level_width = 200 * (2 ** level)
+            
+            for i, (node, x, current_y) in enumerate(queue):
+                node_id = f"tree_node_{id(node)}"
+                
+                # 计算节点位置
+                if len(queue) > 1:
+                    node_x = x - level_width/2 + i * (level_width / (len(queue) - 1))
+                else:
+                    node_x = x
+                
+                # 动画效果
+                if level == build_step:
+                    # 当前步骤的节点有动画效果
+                    target_y = current_y
+                    start_y = y + 200
+                    node_y = start_y + (target_y - start_y) * progress
+                    scale = 0.5 + 0.5 * progress
+                else:
+                    node_y = current_y
+                    scale = 1.0
+                
+                # 创建节点快照
+                if node.char is not None:
+                    # 叶子节点
+                    node_snapshot = NodeSnapshot(
+                        id=node_id,
+                        value=f"{node.char}:{node.freq}",
+                        x=node_x,
+                        y=node_y,
+                        node_type="circle",
+                        color="#FF6B6B",
+                        width=int(40 * scale),
+                        height=int(40 * scale)
+                    )
+                else:
+                    # 内部节点
+                    node_snapshot = NodeSnapshot(
+                        id=node_id,
+                        value=str(node.freq),
+                        x=node_x,
+                        y=node_y,
+                        node_type="circle",
+                        color="#4C78A8",
+                        width=int(40 * scale),
+                        height=int(40 * scale)
+                    )
+                
+                snapshot.nodes.append(node_snapshot)
+                
+                # 添加子节点到下一层
+                if node.left:
+                    next_queue.append((node.left, node_x, current_y + level_height))
+                if node.right:
+                    next_queue.append((node.right, node_x, current_y + level_height))
+            
+            queue = next_queue
+            level += 1
+        
+        # 添加边（带动画效果）
+        HuffmanTreeAdapter._add_animated_edges(huffman_tree.root, snapshot, start_x, y, level_height, build_step, progress)
+    
+    @staticmethod
+    def _add_animated_edges(node, snapshot, start_x, y, level_height, build_step, progress, level=0):
+        """添加带动画效果的边"""
+        if not node or level >= build_step:
+            return
+        
+        node_id = f"tree_node_{id(node)}"
+        
+        # 添加左子节点边
+        if node.left:
+            left_id = f"tree_node_{id(node.left)}"
+            edge = EdgeSnapshot(
+                from_id=node_id,
+                to_id=left_id,
+                arrow_type="line"
+            )
+            
+            # 计算边的位置
+            level_width = 200 * (2 ** level)
+            edge.from_x = start_x
+            edge.from_y = y + level * level_height
+            edge.to_x = start_x - level_width/2
+            edge.to_y = y + (level + 1) * level_height
+            
+            # 动画效果：边从淡入到清晰
+            if level == build_step - 1:
+                edge.color = f"rgba(76, 120, 168, {progress})"  # 透明度动画
+            else:
+                edge.color = "#4C78A8"
+            
+            snapshot.edges.append(edge)
+            
+            # 递归添加左子树的边
+            HuffmanTreeAdapter._add_animated_edges(node.left, snapshot, start_x - level_width/2, y, level_height, build_step, progress, level + 1)
+        
+        # 添加右子节点边
+        if node.right:
+            right_id = f"tree_node_{id(node.right)}"
+            edge = EdgeSnapshot(
+                from_id=node_id,
+                to_id=right_id,
+                arrow_type="line"
+            )
+            
+            # 计算边的位置
+            level_width = 200 * (2 ** level)
+            edge.from_x = start_x
+            edge.from_y = y + level * level_height
+            edge.to_x = start_x + level_width/2
+            edge.to_y = y + (level + 1) * level_height
+            
+            # 动画效果：边从淡入到清晰
+            if level == build_step - 1:
+                edge.color = f"rgba(76, 120, 168, {progress})"  # 透明度动画
+            else:
+                edge.color = "#4C78A8"
+            
+            snapshot.edges.append(edge)
+            
+            # 递归添加右子树的边
+            HuffmanTreeAdapter._add_animated_edges(node.right, snapshot, start_x + level_width/2, y, level_height, build_step, progress, level + 1)
+    
+    @staticmethod
+    def _create_complete_tree_snapshot(huffman_tree, start_x, y, level_height, node_spacing):
+        """创建完整树的快照"""
+        snapshot = StructureSnapshot()
+        snapshot.hint_text = f"哈夫曼树 (编码数: {len(huffman_tree.get_codes())})"
+        
+        # 使用层序遍历获取所有节点
+        queue = [(huffman_tree.root, start_x, y)]
+        level = 0
+        
+        while queue:
+            next_queue = []
+            level_width = node_spacing * (2 ** level)
+            
+            for i, (node, x, current_y) in enumerate(queue):
+                node_id = f"node_{id(node)}"
+                
+                # 计算节点位置
+                if len(queue) > 1:
+                    node_x = x - level_width/2 + i * (level_width / (len(queue) - 1))
+                else:
+                    node_x = x
+                
+                # 创建节点快照
+                if node.char is not None:
+                    # 叶子节点
+                    node_snapshot = NodeSnapshot(
+                        id=node_id,
+                        value=f"{node.char}:{node.freq}",
+                        x=node_x,
+                        y=current_y,
+                        node_type="circle",
+                        color="#FF6B6B"  # 红色表示叶子节点
+                    )
+                else:
+                    # 内部节点
+                    node_snapshot = NodeSnapshot(
+                        id=node_id,
+                        value=str(node.freq),
+                        x=node_x,
+                        y=current_y,
+                        node_type="circle",
+                        color="#4C78A8"  # 蓝色表示内部节点
+                    )
+                
+                snapshot.nodes.append(node_snapshot)
+                
+                # 添加子节点到下一层
+                if node.left:
+                    next_queue.append((node.left, node_x, current_y + level_height))
+                if node.right:
+                    next_queue.append((node.right, node_x, current_y + level_height))
+            
+            queue = next_queue
+            level += 1
+        
+        # 添加边
+        HuffmanTreeAdapter._add_edges(huffman_tree.root, snapshot, start_x, y, level_height, node_spacing)
+        
+        return snapshot
+    
+    @staticmethod
+    def _add_edges(node, snapshot, start_x, y, level_height, node_spacing, level=0):
+        """递归添加边"""
+        if not node:
+            return
+        
+        node_id = f"node_{id(node)}"
+        
+        # 添加左子节点边
+        if node.left:
+            left_id = f"node_{id(node.left)}"
+            edge = EdgeSnapshot(
+                from_id=node_id,
+                to_id=left_id,
+                arrow_type="line"
+            )
+            edge.from_x = start_x
+            edge.from_y = y + level * level_height
+            edge.to_x = start_x - node_spacing * (2 ** level) / 2
+            edge.to_y = y + (level + 1) * level_height
+            edge.color = "#4C78A8"
+            snapshot.edges.append(edge)
+            
+            # 递归添加左子树的边
+            HuffmanTreeAdapter._add_edges(node.left, snapshot, start_x - node_spacing * (2 ** level) / 2, y, level_height, node_spacing, level + 1)
+        
+        # 添加右子节点边
+        if node.right:
+            right_id = f"node_{id(node.right)}"
+            edge = EdgeSnapshot(
+                from_id=node_id,
+                to_id=right_id,
+                arrow_type="line"
+            )
+            edge.from_x = start_x
+            edge.from_y = y + level * level_height
+            edge.to_x = start_x + node_spacing * (2 ** level) / 2
+            edge.to_y = y + (level + 1) * level_height
+            edge.color = "#4C78A8"
+            snapshot.edges.append(edge)
+            
+            # 递归添加右子树的边
+            HuffmanTreeAdapter._add_edges(node.right, snapshot, start_x + node_spacing * (2 ** level) / 2, y, level_height, node_spacing, level + 1)

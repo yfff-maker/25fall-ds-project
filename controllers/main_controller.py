@@ -359,9 +359,29 @@ class MainController(QObject):
         if progress >= 1.0:
             self._animation_timer.stop()
             if structure._animation_state == 'creating_root':
-                structure.complete_create_root_animation()
+                # 创建根节点
+                structure.root = structure.Node(structure._new_value)
+                structure._animation_state = None
+                structure._animation_progress = 0.0
+                structure._new_value = None
             elif structure._animation_state == 'inserting':
-                structure.complete_insert_animation()
+                # 插入新节点
+                if structure._parent_value and structure._insert_position:
+                    parent_node = structure.find_node_by_value(structure._parent_value)
+                    if parent_node:
+                        new_node = structure.Node(structure._new_value)
+                        if structure._insert_position == 'left':
+                            parent_node.left = new_node
+                        else:  # right
+                            parent_node.right = new_node
+                
+                structure._animation_state = None
+                structure._animation_progress = 0.0
+                structure._new_value = None
+                structure._parent_value = None
+                structure._insert_position = None
+            
+            # 最终更新显示
             self._update_snapshot()
             self._animation_timer.deleteLater()
     
