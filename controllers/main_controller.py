@@ -67,12 +67,12 @@ class MainController(QObject):
         if self.current_structure_key in self.structures:
             structure = self.structures[self.current_structure_key]
             adapter = self.adapters[self.current_structure_key]
-            snapshot = adapter.to_snapshot(structure)
+            snapshot = adapter.to_snapshot(structure) # ← 创建：通过适配器创建 StructureSnapshot
             self.snapshot_updated.emit(snapshot)
     
     def _get_current_structure(self):
         """获取当前数据结构"""
-        return self.structures.get(self.current_structure_key)
+        return self.structures.get(self.current_structure_key) # ← 依赖：使用数据结构实例
     
     def _get_current_adapter(self):
         """获取当前适配器"""
@@ -269,6 +269,11 @@ class MainController(QObject):
                 structure.push(value)
                 self._update_snapshot()
                 
+                # 检查是否是栈满状态
+                if getattr(structure, '_animation_state', None) == 'stack_full':
+                    self._show_error("栈已满！", "无法添加更多元素，栈容量为10")
+                    return
+                
                 # 使用定时器实现平滑动画
                 from PyQt5.QtCore import QTimer
                 
@@ -418,6 +423,70 @@ class MainController(QObject):
                 self._update_snapshot()
         except Exception as e:
             self._show_error("清空栈失败", str(e))
+    
+    def build_stack(self, input_text: str):
+        """构建栈"""
+        try:
+            data = self._parse_comma_separated_values(input_text)
+            structure = self._get_current_structure()
+            if structure:
+                # 开始构建动画
+                structure.build(data)
+                self._update_snapshot()
+                
+                # 检查是否是栈满状态
+                if getattr(structure, '_animation_state', None) == 'stack_full':
+                    self._show_error("栈已满！", "无法添加更多元素，栈容量为10")
+                    return
+                
+                # 使用定时器实现平滑动画
+                from PyQt5.QtCore import QTimer
+                
+                # 创建动画定时器
+                self._animation_timer = QTimer()
+                self._animation_timer.timeout.connect(lambda: self._update_stack_build_animation(structure))
+                self._animation_timer.start(50)  # 每50ms更新一次，实现平滑效果
+                
+                # 设置动画总时长
+                self._animation_duration = 1000  # 1秒总时长
+                self._animation_start_time = 0
+                
+        except Exception as e:
+            self._show_error("构建栈失败", str(e))
+    
+    def _update_stack_build_animation(self, structure):
+        """更新栈构建动画"""
+        import time
+        
+        if self._animation_start_time == 0:
+            self._animation_start_time = time.time() * 1000  # 转换为毫秒
+        
+        current_time = time.time() * 1000
+        elapsed = current_time - self._animation_start_time
+        
+        # 计算动画进度 (0.0 到 1.0)
+        progress = min(elapsed / self._animation_duration, 1.0)
+        structure.update_animation_progress(progress)
+        
+        # 处理构建动画的逐步显示
+        if structure._animation_state == 'building':
+            build_values = getattr(structure, '_build_values', [])
+            total_elements = len(build_values)
+            if total_elements > 0:
+                # 计算当前应该显示到第几个元素
+                current_element_index = int(progress * total_elements)
+                structure._build_index = current_element_index
+        
+        # 更新显示
+        self._update_snapshot()
+        
+        # 如果动画完成，停止定时器并完成操作
+        if progress >= 1.0:
+            self._animation_timer.stop()
+            if structure._animation_state == 'building':
+                structure.complete_build_animation()
+            self._update_snapshot()
+            self._animation_timer.deleteLater()
     
     # ========== 二叉树操作 ==========
     

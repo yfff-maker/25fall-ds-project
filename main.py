@@ -57,7 +57,7 @@ class MainWindow(QMainWindow):
         self.resize(1280, 820)
 
         # central canvas
-        self.canvas = Canvas(self)
+        self.canvas = Canvas(self) # ← 组合关系：MainWindow 持有 Canvas 实例
         self.setCentralWidget(self.canvas.view)
 
         # status bar
@@ -80,7 +80,7 @@ class MainWindow(QMainWindow):
 
         # 初始化控制器
         '''控制器层'''
-        self.controller = MainController()
+        self.controller = MainController() # ← 组合关系：MainWindow 持有 MainController 实例
         
         # 连接控制器信号
         self.controller.snapshot_updated.connect(self.canvas.render_snapshot)
@@ -253,6 +253,23 @@ class MainWindow(QMainWindow):
             lay.addWidget(b1)
 
         elif key == "Stack":
+            # 添加构建功能
+            build_line = QLineEdit()
+            build_line.setPlaceholderText("初始数据：如 1,2,3,4")
+            lay.addWidget(build_line)
+            btn_build = QPushButton("构建")
+            def build_stack():
+                self.controller.build_stack(build_line.text().strip())
+            btn_build.clicked.connect(build_stack)
+            lay.addWidget(btn_build)
+            
+            # 添加分隔线
+            separator = QFrame()
+            separator.setFrameShape(QFrame.HLine)
+            separator.setFrameShadow(QFrame.Sunken)
+            lay.addWidget(separator)
+            
+            # 原有的Push/Pop/Clear功能
             lay.addWidget(input_line)
             b1 = QPushButton("Push")
             b1.clicked.connect(lambda: self.controller.push_stack(get_value()))

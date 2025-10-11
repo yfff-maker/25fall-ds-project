@@ -143,6 +143,42 @@ class StackModel(BaseStructure):
         self._animation_state = None
         self._new_value = None
     
+    def build(self, values):
+        """构建栈 - 批量添加元素"""
+        if not self.active:
+            return
+        
+        # 检查输入元素数量是否超过栈容量
+        values_list = list(values)
+        if len(values_list) > 10:
+            # 设置栈满状态，不执行构建操作
+            self._animation_state = 'stack_full'
+            self._animation_progress = 0.0
+            return
+        
+        # 清空当前栈
+        self.data = self.StackLL()
+        self._animation_state = None
+        self._new_value = None
+        
+        # 设置构建动画状态
+        self._animation_state = 'building'
+        self._build_values = values_list  # 转换为列表
+        self._build_index = 0  # 当前构建到的索引
+        self._animation_progress = 0.0
+    
+    def complete_build_animation(self):
+        """完成构建动画"""
+        if self._animation_state == 'building':
+            # 将所有值推入栈中
+            for value in self._build_values:
+                self.data.push(value)
+            
+            self._animation_state = None
+            self._build_values = []
+            self._build_index = 0
+            self._animation_progress = 0.0
+    
     def complete_push_animation(self):
         """完成入栈动画"""
         if self._animation_state == 'pushing' and self._new_value is not None:

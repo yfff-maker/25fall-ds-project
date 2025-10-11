@@ -1,154 +1,197 @@
-# 数据结构架构设计
+# 数据结构可视化模拟器架构设计
 
-## 完全分离设计原则
+## 项目概述
 
-### 设计理念
-- **容器层**: 提供通用数据结构容器
-- **结构层**: 提供具体数据结构的业务逻辑
-- **分离原则**: 容器和数据结构职责分离
+这是一个基于 PyQt5 的数据结构可视化教学工具，实现了多种经典数据结构的动态演示和交互操作。项目采用 MVC 架构模式，实现了业务逻辑与UI的完全分离。
 
-## 架构层次
+## 整体架构
 
 ```
-应用层 (main.py, controllers/)
-    ↓
-数据结构层 (StackModel, LinkedListModel, QueueModel)
-    ↓
-容器层 (CustomList)
-    ↓
-节点层 (ListNode)
+┌─────────────────────────────────────────────────────────────┐
+│                    用户界面层 (UI Layer)                      │
+├─────────────────────────────────────────────────────────────┤
+│  main.py (主窗口) │ canvas.py (绘图) │ widgets/ (控制面板)    │
+└─────────────────────────────────────────────────────────────┘
+                                ↓
+┌─────────────────────────────────────────────────────────────┐
+│                   控制器层 (Controller Layer)                 │
+├─────────────────────────────────────────────────────────────┤
+│  main_controller.py (主控制器) │ adapters.py (数据适配器)     │
+└─────────────────────────────────────────────────────────────┘
+                                ↓
+┌─────────────────────────────────────────────────────────────┐
+│                   模型层 (Model Layer)                       │
+├─────────────────────────────────────────────────────────────┤
+│  base.py (基类) │ 各种数据结构实现 (structures/)             │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-## 详细设计
+## 详细架构设计
 
-### 1. 容器层 (Container Layer)
+### 1. 用户界面层 (UI Layer)
 
-#### CustomList - 通用链表容器
+#### main.py - 主窗口
+- **MainWindow**: 主窗口类，负责整体UI布局
+- **ParentNodeDialog**: 父节点选择对话框
+- **功能**:
+  - 左侧分组选择数据结构（顺序表、链表、栈、树等）
+  - 中间绘图区域显示数据结构
+  - 底部控制面板（播放/暂停/下一步/速度控制）
+  - 动态操作面板（根据选择的数据结构显示相应操作）
+
+#### canvas.py - 绘图引擎
+- **Canvas**: 绘图主类，封装 QGraphicsScene
+- **Animator**: 动画控制器，基于 QTimer 实现步进动画
+- **功能**:
+  - 节点渲染（圆形节点、方框节点）
+  - 边/箭头渲染
+  - 动画队列管理
+  - 快照渲染系统
+
+#### widgets/control_panel.py - 控制面板
+- **ControlPanel**: 底部控制面板
+- **功能**:
+  - 播放/暂停控制
+  - 单步执行
+  - 动画速度调节
+
+### 2. 控制器层 (Controller Layer)
+
+#### main_controller.py - 主控制器
+- **MainController**: 核心控制器，协调 Model 和 View
+- **功能**:
+  - 管理所有数据结构实例
+  - 处理用户操作请求
+  - 协调动画系统
+  - 信号槽通信
+
+#### adapters.py - 数据适配器
+- **适配器模式**: 将数据结构状态转换为可视化快照
+- **核心类**:
+  - `StructureSnapshot`: 数据结构快照
+  - `NodeSnapshot`: 节点快照
+  - `EdgeSnapshot`: 边快照
+  - `BoxSnapshot`: 方框快照
+- **各数据结构适配器**: 将具体数据结构转换为统一的可视化格式
+
+### 3. 模型层 (Model Layer)
+
+#### base.py - 抽象基类
 ```python
-class CustomList:
-    """通用链表容器，替代Python内置list"""
-    - 提供基础的链表操作
-    - 不继承BaseStructure
-    - 可被多个数据结构复用
-    - 类似Python内置list的功能
+class BaseStructure:
+    """所有数据结构的抽象基类"""
+    - 提供统一的激活状态管理
+    - 定义基本接口规范
+    - 纯业务逻辑，无UI依赖
 ```
 
-**特点**:
-- ✅ 纯容器，无业务逻辑
-- ✅ 可复用性强
-- ✅ 避免使用Python内置list
-- ✅ 支持迭代、索引访问等
+#### 数据结构实现
+项目实现了以下数据结构：
 
-### 2. 数据结构层 (Structure Layer)
+1. **顺序表 (SequentialListModel)**
+   - 基于数组实现
+   - 支持按位置插入/删除
+   - 动态扩容机制
 
-#### StackModel - 栈数据结构
-```python
-class StackModel(BaseStructure):
-    """栈数据结构，基于CustomList实现"""
-    - 继承BaseStructure
-    - 内部使用CustomList
-    - 实现LIFO逻辑
-    - 提供栈特有操作
+2. **链表 (LinkedListModel)**
+   - 基于自定义链表节点实现
+   - 支持头插、尾插、按位置插入
+   - 支持按值删除
+
+3. **栈 (StackModel)**
+   - 基于自定义链表栈实现
+   - 完全避免使用 Python 内置 list
+   - 支持 push/pop 操作
+
+4. **二叉树 (BinaryTreeModel)**
+   - 链式存储结构
+   - 支持前序、中序、后序遍历
+   - 支持动态节点插入
+
+5. **二叉搜索树 (BSTModel)**
+   - 基于二叉树实现
+   - 支持插入、查找、删除操作
+   - 维护二叉搜索树性质
+
+6. **哈夫曼树 (HuffmanTreeModel)**
+   - 基于频率表构建
+   - 支持动态合并可视化
+
+## 核心设计原则
+
+### 1. MVC 架构分离
+- **Model**: 纯业务逻辑，无UI依赖
+- **View**: 纯UI展示，无业务逻辑
+- **Controller**: 协调Model和View，处理用户交互
+
+### 2. 适配器模式
+- 统一的可视化接口
+- 各数据结构通过适配器转换为快照
+- 便于扩展新的数据结构
+
+### 3. 信号槽通信
+- 松耦合的组件通信
+- 异步事件处理
+- 便于维护和测试
+
+### 4. 动画系统
+- 基于快照的渲染系统
+- 步进式动画队列
+- 可控制的播放速度
+
+## 技术特点
+
+### 1. 完全自定义实现
+- 避免使用 Python 内置 list
+- 所有数据结构都是自定义实现
+- 符合数据结构教学要求
+
+### 2. 可视化友好
+- 支持多种节点类型（圆形、方框）
+- 丰富的颜色和动画效果
+- 直观的操作反馈
+
+### 3. 教学导向
+- 清晰的代码结构
+- 详细的注释说明
+- 易于理解和扩展
+
+## 文件结构
+
 ```
-
-#### LinkedListModel - 链表数据结构
-```python
-class LinkedListModel(BaseStructure):
-    """链表数据结构，基于CustomList实现"""
-    - 继承BaseStructure
-    - 内部使用CustomList
-    - 实现链表特有操作
-    - 提供插入、删除、查找等
-```
-
-#### QueueModel - 队列数据结构
-```python
-class QueueModel(BaseStructure):
-    """队列数据结构，基于CustomList实现"""
-    - 继承BaseStructure
-    - 内部使用CustomList
-    - 实现FIFO逻辑
-    - 提供队列特有操作
-```
-
-## 设计优势
-
-### 1. 职责分离
-- **CustomList**: 专注容器功能
-- **数据结构类**: 专注业务逻辑
-- **清晰边界**: 各司其职
-
-### 2. 可复用性
-- **CustomList**: 可被多个数据结构使用
-- **避免重复**: 不需要重复实现链表
-- **统一接口**: 所有数据结构使用相同的容器
-
-### 3. 可维护性
-- **修改容器**: 只需修改CustomList
-- **修改逻辑**: 只需修改具体数据结构
-- **影响隔离**: 修改不会相互影响
-
-### 4. 符合要求
-- **无内置list**: 完全避免使用Python内置list
-- **自定义实现**: 所有容器都是自定义的
-- **教学友好**: 符合数据结构教学要求
-
-## 使用示例
-
-### 创建数据结构
-```python
-# 栈
-stack = StackModel()
-stack.push(1)
-stack.push(2)
-
-# 链表
-linked_list = LinkedListModel()
-linked_list.append(1)
-linked_list.insert(0, 2)
-
-# 队列
-queue = QueueModel()
-queue.enqueue(1)
-queue.enqueue(2)
-```
-
-### 底层都使用CustomList
-```python
-# 所有数据结构内部都使用CustomList
-stack.data        # CustomList实例
-linked_list.data  # CustomList实例
-queue.data        # CustomList实例
+├── main.py                 # 应用入口
+├── canvas.py              # 绘图引擎
+├── controllers/           # 控制器层
+│   ├── main_controller.py # 主控制器
+│   └── adapters.py       # 数据适配器
+├── structures/           # 数据结构层
+│   ├── base.py          # 抽象基类
+│   ├── sequential_list.py # 顺序表
+│   ├── linked_list.py   # 链表
+│   ├── stack.py         # 栈
+│   ├── binary_tree.py   # 二叉树
+│   ├── bst.py          # 二叉搜索树
+│   └── huffman.py      # 哈夫曼树
+└── widgets/             # UI组件
+    └── control_panel.py # 控制面板
 ```
 
 ## 扩展指南
 
 ### 添加新数据结构
-1. 继承`BaseStructure`
-2. 内部使用`CustomList`
-3. 实现数据结构特有操作
-4. 添加适配器支持可视化
+1. 在 `structures/` 目录下创建新的数据结构类
+2. 继承 `BaseStructure` 基类
+3. 实现数据结构特有的操作方法
+4. 在 `adapters.py` 中添加对应的适配器
+5. 在 `main_controller.py` 中注册新数据结构
+6. 在 `main.py` 中添加UI操作面板
 
-### 示例：双端队列
-```python
-class DequeModel(BaseStructure):
-    def __init__(self):
-        super().__init__()
-        self.data = CustomList()  # 复用容器
-    
-    def add_front(self, value):
-        self.data.insert(0, value)
-    
-    def add_rear(self, value):
-        self.data.append(value)
-```
+### 添加新动画效果
+1. 在数据结构类中添加动画状态管理
+2. 在适配器中处理动画状态的快照转换
+3. 在控制器中协调动画定时器
+4. 在画布中实现具体的动画渲染
 
 ## 总结
 
-✅ **完全分离**: 容器和数据结构职责分离  
-✅ **高度复用**: CustomList可被多个数据结构使用  
-✅ **易于维护**: 修改影响范围小  
-✅ **符合要求**: 完全避免使用Python内置list  
-✅ **教学友好**: 结构清晰，易于理解  
-
-这种设计既满足了"不使用内置list"的要求，又提供了清晰的架构和良好的可维护性！
+这个项目采用了清晰的 MVC 架构，实现了业务逻辑与UI的完全分离。通过适配器模式统一了可视化接口，通过信号槽实现了松耦合的组件通信。整个系统具有良好的可扩展性和可维护性，非常适合作为数据结构教学工具使用。

@@ -59,11 +59,11 @@ class SequentialListAdapter:
     @staticmethod
     def to_snapshot(sequential_list, start_x=100, y=200, box_width=60, box_height=40) -> StructureSnapshot:
         """将顺序表转换为快照"""
-        snapshot = StructureSnapshot()
+        snapshot = StructureSnapshot() # ← 创建：创建 StructureSnapshot 实例
         list_size = sequential_list.length()
         snapshot.hint_text = f"顺序表 (长度: {list_size}, 容量: {sequential_list.get_capacity()})"
         
-        # 显示30个位置的数组
+        # 动态数量绘制：根据实际元素数量绘制
         array_start_x = start_x
         array_start_y = y + 100  # 数组在标题下方
         
@@ -75,47 +75,59 @@ class SequentialListAdapter:
         insert_position = getattr(sequential_list, '_insert_position', 0) if animation_state == 'inserting' else -1
         delete_position = getattr(sequential_list, '_delete_position', 0) if animation_state == 'deleting' else -1
         
-        for i in range(30):
+        # 自动换行布局参数
+        canvas_width = 1200  # 画布宽度
+        elements_per_row = max(1, canvas_width // box_width)  # 每行最多元素数量
+        
+        # 动态绘制元素（只绘制实际存在的元素）
+        for i in range(list_size):
+            # 计算元素位置（自动换行）
+            row = i // elements_per_row
+            col = i % elements_per_row
+            
+            element_x = array_start_x + col * box_width
+            element_y = array_start_y + row * (box_height + 30)  # 行间距30像素
+            
             # 确定方框的值和颜色
-            if i < list_size:
-                # 有元素的位置
-                value = str(list_data[i])  # 顺序表按索引顺序显示
-                
-                # 如果在插入动画中，且该位置需要后移，则隐藏原位置
-                if animation_state == 'inserting' and i >= insert_position:
-                    # 隐藏需要后移的元素（在原位置显示为空白）
-                    value = ""
-                    color = "#E0E0E0"  # 浅灰色
-                # 如果在删除动画中，且该位置需要前移，则隐藏原位置
-                elif animation_state == 'deleting' and i > delete_position:
-                    # 隐藏需要前移的元素（在原位置显示为空白）
-                    value = ""
-                    color = "#E0E0E0"  # 浅灰色
-                else:
-                    color = "#4C78A8"  # 蓝色
-            else:
-                # 空位置
+            value = str(list_data[i])  # 顺序表按索引顺序显示
+            
+            # 如果在插入动画中，且该位置需要后移，则隐藏原位置
+            if animation_state == 'inserting' and i >= insert_position:
+                # 隐藏需要后移的元素（在原位置显示为空白）
                 value = ""
                 color = "#E0E0E0"  # 浅灰色
+            # 如果在删除动画中，且该位置需要前移，则隐藏原位置
+            elif animation_state == 'deleting' and i > delete_position:
+                # 隐藏需要前移的元素（在原位置显示为空白）
+                value = ""
+                color = "#E0E0E0"  # 浅灰色
+            else:
+                color = "#4C78A8"  # 蓝色
             
             box = BoxSnapshot(
                 id=f"array_box_{i}",
                 value=value,
-                x=array_start_x + i * box_width,
-                y=array_start_y,
+                x=element_x,
+                y=element_y,
                 width=box_width,
                 height=box_height,
                 color=color
             )
             snapshot.boxes.append(box)
         
-        # 添加位置索引标签
-        for i in range(30):
+        # 添加位置索引标签（只显示实际元素的索引）
+        for i in range(list_size):
+            row = i // elements_per_row
+            col = i % elements_per_row
+            
+            element_x = array_start_x + col * box_width
+            element_y = array_start_y + row * (box_height + 30)
+            
             index_label = BoxSnapshot(
                 id=f"index_{i}",
                 value=str(i),
-                x=array_start_x + i * box_width,
-                y=array_start_y + box_height + 5,
+                x=element_x,
+                y=element_y + box_height + 5,
                 width=box_width,
                 height=20,
                 color="#F0F0F0"
@@ -124,12 +136,20 @@ class SequentialListAdapter:
         
         # 添加当前长度指示器
         if list_size > 0:
+            # 计算最后一个元素的位置（适应换行布局）
+            last_element_index = list_size - 1
+            last_row = last_element_index // elements_per_row
+            last_col = last_element_index % elements_per_row
+            
+            last_element_x = array_start_x + last_col * box_width
+            last_element_y = array_start_y + last_row * (box_height + 30)
+            
             # 高亮当前最后一个元素位置
             length_box = BoxSnapshot(
                 id="length_indicator",
                 value="LEN",
-                x=array_start_x + (list_size - 1) * box_width,
-                y=array_start_y - 30,
+                x=last_element_x,
+                y=last_element_y - 30,
                 width=box_width,
                 height=25,
                 color="#FF6B6B"  # 红色
@@ -143,9 +163,11 @@ class SequentialListAdapter:
             animation_progress = getattr(sequential_list, '_animation_progress', 0.0)
             insert_position = getattr(sequential_list, '_insert_position', 0)
             if new_value is not None:
-                # 计算目标位置（插入位置）
-                target_x = array_start_x + insert_position * box_width
-                target_y = array_start_y
+                # 计算目标位置（插入位置）- 适应换行布局
+                target_row = insert_position // elements_per_row
+                target_col = insert_position % elements_per_row
+                target_x = array_start_x + target_col * box_width
+                target_y = array_start_y + target_row * (box_height + 30)
                 
                 # 设置目标位置到顺序表对象
                 sequential_list.set_animation_target(target_x, target_y)
@@ -173,16 +195,28 @@ class SequentialListAdapter:
                 # 显示需要后移的元素（插入位置及之后的元素）
                 for i in range(insert_position, list_size):
                     if i < len(list_data):
+                        # 计算后移后的位置（适应换行布局）
+                        original_row = i // elements_per_row
+                        original_col = i % elements_per_row
+                        original_x = array_start_x + original_col * box_width
+                        original_y = array_start_y + original_row * (box_height + 30)
+                        
                         # 计算后移后的位置
-                        shift_distance = box_width * animation_progress  # 向后移动的距离
-                        shifted_x = array_start_x + (i + 1) * box_width - box_width * (1 - animation_progress)
+                        next_row = (i + 1) // elements_per_row
+                        next_col = (i + 1) % elements_per_row
+                        next_x = array_start_x + next_col * box_width
+                        next_y = array_start_y + next_row * (box_height + 30)
+                        
+                        # 使用线性插值计算当前位置
+                        shifted_x = original_x + (next_x - original_x) * animation_progress
+                        shifted_y = original_y + (next_y - original_y) * animation_progress
                         
                         # 创建后移的元素
                         shifted_box = BoxSnapshot(
                             id=f"shifted_box_{i}",
                             value=str(list_data[i]),
                             x=shifted_x,
-                            y=array_start_y,
+                            y=shifted_y,
                             width=box_width,
                             height=box_height,
                             color="#FFA500"  # 橙色表示正在后移的元素
@@ -191,11 +225,13 @@ class SequentialListAdapter:
                         
                         # 添加移动箭头（只在动画进行中显示）
                         if animation_progress < 0.8:  # 动画快结束时隐藏箭头
+                            arrow_x = original_x + box_width // 2
+                            arrow_y = original_y + box_height + 10
                             arrow_box = BoxSnapshot(
                                 id=f"arrow_{i}",
                                 value="→",
-                                x=array_start_x + i * box_width + box_width // 2,
-                                y=array_start_y + box_height + 10,
+                                x=arrow_x,
+                                y=arrow_y,
                                 width=20,
                                 height=20,
                                 color="#FFA500"
@@ -206,8 +242,8 @@ class SequentialListAdapter:
                 insert_indicator = BoxSnapshot(
                     id="insert_indicator",
                     value="INSERT",
-                    x=array_start_x + insert_position * box_width,
-                    y=array_start_y - 60,
+                    x=target_x,
+                    y=target_y - 60,
                     width=box_width,
                     height=25,
                     color="#00FF00"  # 绿色表示插入位置
@@ -221,14 +257,20 @@ class SequentialListAdapter:
             animation_progress = getattr(sequential_list, '_animation_progress', 0.0)
             
             if deleted_value is not None:
+                # 计算删除位置（适应换行布局）
+                delete_row = delete_position // elements_per_row
+                delete_col = delete_position % elements_per_row
+                delete_x = array_start_x + delete_col * box_width
+                delete_y = array_start_y + delete_row * (box_height + 30)
+                
                 # 显示被删除的元素（逐渐消失）
                 # 根据动画进度调整透明度效果（通过颜色变化模拟）
                 if animation_progress < 0.7:  # 动画前70%显示被删除元素
                     delete_box = BoxSnapshot(
                         id="deleted_element",
                         value=str(deleted_value),
-                        x=array_start_x + delete_position * box_width,
-                        y=array_start_y,
+                        x=delete_x,
+                        y=delete_y,
                         width=box_width,
                         height=box_height,
                         color="#FF0000"  # 红色表示被删除的元素
@@ -238,19 +280,29 @@ class SequentialListAdapter:
                 # 显示需要前移的元素（删除位置之后的元素）
                 for i in range(delete_position + 1, list_size):
                     if i < len(list_data):
-                        # 计算前移后的位置
+                        # 计算前移后的位置（适应换行布局）
                         # 元素从位置i移动到位置i-1
-                        # 使用线性插值：从原位置i移动到目标位置i-1
-                        original_x = array_start_x + i * box_width
-                        target_x = array_start_x + (i - 1) * box_width
+                        original_row = i // elements_per_row
+                        original_col = i % elements_per_row
+                        original_x = array_start_x + original_col * box_width
+                        original_y = array_start_y + original_row * (box_height + 30)
+                        
+                        # 计算目标位置（i-1的位置）
+                        target_row = (i - 1) // elements_per_row
+                        target_col = (i - 1) % elements_per_row
+                        target_x = array_start_x + target_col * box_width
+                        target_y = array_start_y + target_row * (box_height + 30)
+                        
+                        # 使用线性插值计算当前位置
                         shifted_x = original_x + (target_x - original_x) * animation_progress
+                        shifted_y = original_y + (target_y - original_y) * animation_progress
                         
                         # 创建前移的元素
                         shifted_box = BoxSnapshot(
                             id=f"shifted_box_{i}",
                             value=str(list_data[i]),
                             x=shifted_x,
-                            y=array_start_y,
+                            y=shifted_y,
                             width=box_width,
                             height=box_height,
                             color="#FFA500"  # 橙色表示正在前移的元素
@@ -259,11 +311,13 @@ class SequentialListAdapter:
                         
                         # 添加移动箭头（只在动画进行中显示）
                         if animation_progress < 0.8:  # 动画快结束时隐藏箭头
+                            arrow_x = original_x - box_width // 2
+                            arrow_y = original_y + box_height + 10
                             arrow_box = BoxSnapshot(
                                 id=f"arrow_{i}",
                                 value="←",
-                                x=array_start_x + i * box_width - box_width // 2,
-                                y=array_start_y + box_height + 10,
+                                x=arrow_x,
+                                y=arrow_y,
                                 width=20,
                                 height=20,
                                 color="#FFA500"
@@ -274,8 +328,8 @@ class SequentialListAdapter:
                 delete_indicator = BoxSnapshot(
                     id="delete_indicator",
                     value="DELETE",
-                    x=array_start_x + delete_position * box_width,
-                    y=array_start_y - 60,
+                    x=delete_x,
+                    y=delete_y - 60,
                     width=box_width,
                     height=25,
                     color="#FF0000"  # 红色表示删除位置
@@ -701,7 +755,10 @@ class StackAdapter:
         
         # 检查是否有动画状态
         animation_state = getattr(stack, '_animation_state', None)
-        if animation_state == 'pushing':
+        if animation_state == 'building':
+            build_values = getattr(stack, '_build_values', [])
+            snapshot.hint_text = f"栈 (正在构建... 进度: {len(build_values)} 个元素)"
+        elif animation_state == 'pushing':
             snapshot.hint_text = f"栈 (正在入栈... top = {stack_size}, 长度: {stack_size})"
         elif animation_state == 'popping':
             snapshot.hint_text = f"栈 (正在出栈... top = {stack_size}, 长度: {stack_size})"
@@ -712,52 +769,44 @@ class StackAdapter:
         stack_start_x = start_x + 200  # 栈在右侧
         stack_start_y = y + 100  # 栈的起始位置（给栈底留空间）
         
-        # 栈的容量（假设为5）
-        stack_capacity = 5
+        # 动态绘制：只绘制实际存在的元素
+        if stack_size > 0:
+            # 获取栈内容并转换为列表（从栈底到栈顶的顺序）
+            stack_list = stack.data.to_array()  # 使用to_array方法获取正确的顺序
+            
+            # 显示栈中的元素（从下往上堆叠）
+            # stack_list是从栈底到栈顶的顺序
+            # stack_list[0]是栈底，应该显示在最下面
+            # stack_list[-1]是栈顶，应该显示在最上面
+            for i, value in enumerate(stack_list):
+                # 计算元素在栈中的位置（从下往上）
+                # 栈底元素（i=0）应该在最下面
+                # 栈顶元素（i=len-1）应该在最上面
+                stack_position = stack_size - 1 - i
+                stack_box = BoxSnapshot(
+                    id=f"stack_box_{i}",
+                    value=str(value),
+                    x=stack_start_x,
+                    y=stack_start_y + stack_position * (box_height + 2),
+                    width=box_width,
+                    height=box_height,
+                    color="#4C78A8"  # 蓝色
+                )
+                snapshot.boxes.append(stack_box)
         
-        # 先绘制空的栈结构（所有位置）
-        for i in range(stack_capacity):
-            # 空位置用浅灰色表示
-            empty_box = BoxSnapshot(
-                id=f"empty_stack_box_{i}",
-                value="",
-                x=stack_start_x,
-                y=stack_start_y + (stack_capacity - 1 - i) * (box_height + 2),  # 从下往上排列
-                width=box_width,
-                height=box_height,
-                color="#F0F0F0"  # 浅灰色
-            )
-            snapshot.boxes.append(empty_box)
-        
-        # 获取栈内容并转换为列表（从栈底到栈顶的顺序）
-        stack_list = stack.data.to_array()  # 使用to_array方法获取正确的顺序
-        
-        # 显示栈中的元素（从下往上堆叠）
-        # stack_list是从栈底到栈顶的顺序
-        # stack_list[0]是栈底，应该显示在最下面
-        # stack_list[-1]是栈顶，应该显示在最上面
-        for i, value in enumerate(stack_list):
-            # 计算元素在栈中的位置（从下往上）
-            # 栈底元素（i=0）应该在最下面
-            # 栈顶元素（i=len-1）应该在最上面
-            stack_position = stack_capacity - 1 - i
-            stack_box = BoxSnapshot(
-                id=f"stack_box_{i}",
-                value=str(value),
-                x=stack_start_x,
-                y=stack_start_y + stack_position * (box_height + 2),
-                width=box_width,
-                height=box_height,
-                color="#4C78A8"  # 蓝色
-            )
-            snapshot.boxes.append(stack_box)
-        
-        # 添加栈底指示器（固定底座）
+        # 添加栈底指示器（动态位置）
+        if stack_size > 0:
+            # 栈底位置在最后一个元素下方
+            bottom_y = stack_start_y + stack_size * (box_height + 2) + 5
+        else:
+            # 栈空时，栈底在起始位置下方
+            bottom_y = stack_start_y + 5
+            
         bottom_box = BoxSnapshot(
             id="bottom_indicator",
             value="栈底",
             x=stack_start_x - 20,
-            y=stack_start_y + stack_capacity * (box_height + 2) + 5,
+            y=bottom_y,
             width=box_width + 40,
             height=25,
             color="#90EE90"  # 绿色
@@ -765,41 +814,108 @@ class StackAdapter:
         snapshot.boxes.append(bottom_box)
         
         # 添加top指针指示器（指向当前栈顶位置）
+        # 在动画过程中，top指针需要跟随栈顶元素移动
         if stack_size > 0:
             # top指向栈顶元素的位置
-            top_position = stack_capacity - stack_size
-            top_box = BoxSnapshot(
-                id="top_indicator",
-                value="top",
-                x=stack_start_x + box_width + 10,
-                y=stack_start_y + top_position * (box_height + 2) + box_height // 2,
-                width=box_width,
-                height=25,
-                color="#FF6B6B"  # 红色
-            )
-            snapshot.boxes.append(top_box)
+            # 栈顶元素的位置是 stack_start_y + 0 * (box_height + 2)
+            top_y = stack_start_y + box_height // 2
         else:
             # 栈空时，top指向栈底
-            top_box = BoxSnapshot(
-                id="top_indicator",
-                value="top",
-                x=stack_start_x + box_width + 10,
-                y=stack_start_y + stack_capacity * (box_height + 2) + 5,
-                width=box_width,
-                height=25,
-                color="#FF6B6B"  # 红色
-            )
-            snapshot.boxes.append(top_box)
+            top_y = bottom_y
         
-        # 如果正在入栈动画，显示新节点从外部掉入栈顶
+        # 如果在入栈动画中，top指针在新元素到达栈顶之前待在原来的栈顶
         if animation_state == 'pushing':
             new_value = getattr(stack, '_new_value', None)
             animation_progress = getattr(stack, '_animation_progress', 0.0)
             if new_value is not None:
+                # 计算新元素的目标位置（栈顶位置）
+                target_y = stack_start_y + box_height // 2
+                
+                # 计算起始位置（屏幕正上方）
+                start_y = 50 + box_height // 2  # 屏幕正上方
+                
+                # 计算新元素的当前位置
+                new_element_y = start_y + (target_y - start_y) * animation_progress
+                
+                # 如果新元素还没到达栈顶（距离栈顶还有一定距离），top指针待在原来的栈顶
+                if new_element_y > target_y + 20:  # 20像素的容差
+                    # top指针待在原来的栈顶位置（不移动）
+                    # top_y 保持之前计算的值，即原来的栈顶位置
+                    pass
+                else:
+                    # 新元素已经接近或到达栈顶，top指针移动到新的栈顶位置
+                    # 新的栈顶位置就是新元素到达的位置
+                    top_y = target_y
+        
+        top_box = BoxSnapshot(
+            id="top_indicator",
+            value="top",
+            x=stack_start_x + box_width + 10,
+            y=top_y,
+            width=box_width,
+            height=25,
+            color="#FF6B6B"  # 红色
+        )
+        snapshot.boxes.append(top_box)
+        
+        # 如果正在构建动画，显示逐步构建过程
+        if animation_state == 'building':
+            build_values = getattr(stack, '_build_values', [])
+            build_index = getattr(stack, '_build_index', 0)
+            animation_progress = getattr(stack, '_animation_progress', 0.0)
+            
+            # 显示已经构建完成的元素
+            for i in range(build_index):
+                if i < len(build_values):
+                    value = build_values[i]
+                    # 计算元素在栈中的位置（从下往上）
+                    stack_position = build_index - 1 - i
+                    stack_box = BoxSnapshot(
+                        id=f"built_stack_box_{i}",
+                        value=str(value),
+                        x=stack_start_x,
+                        y=stack_start_y + stack_position * (box_height + 2),
+                        width=box_width,
+                        height=box_height,
+                        color="#4C78A8"  # 蓝色
+                    )
+                    snapshot.boxes.append(stack_box)
+            
+            # 显示正在构建的元素（从上方掉下来）
+            if build_index < len(build_values):
+                new_value = build_values[build_index]
                 # 计算目标位置（栈顶位置）
-                target_position = stack_capacity - stack_size - 1
+                target_position = build_index
                 target_x = stack_start_x
                 target_y = stack_start_y + target_position * (box_height + 2)
+                
+                # 计算起始位置（屏幕正上方）
+                start_x_pos = target_x
+                start_y_pos = 50  # 屏幕正上方
+                
+                # 使用线性插值计算当前位置
+                current_x = start_x_pos + (target_x - start_x_pos) * animation_progress
+                current_y = start_y_pos + (target_y - start_y_pos) * animation_progress
+                
+                new_node = BoxSnapshot(
+                    id="building_node",
+                    value=str(new_value),
+                    x=current_x,
+                    y=current_y,
+                    width=box_width,
+                    height=box_height,
+                    color="#FF6B6B"  # 红色表示正在移动的节点
+                )
+                snapshot.boxes.append(new_node)
+        
+        # 如果正在入栈动画，显示新节点从外部掉入栈顶
+        elif animation_state == 'pushing':
+            new_value = getattr(stack, '_new_value', None)
+            animation_progress = getattr(stack, '_animation_progress', 0.0)
+            if new_value is not None:
+                # 计算目标位置（栈顶位置）
+                target_x = stack_start_x
+                target_y = stack_start_y
                 
                 # 设置目标位置到栈对象
                 stack.set_animation_target(target_x, target_y)
@@ -829,7 +945,7 @@ class StackAdapter:
             animation_progress = getattr(stack, '_animation_progress', 0.0)
             if pop_value is not None:
                 # 计算起始位置（栈顶位置）
-                start_position = stack_capacity - stack_size
+                start_position = stack_size - 1
                 start_x = stack_start_x
                 start_y = stack_start_y + start_position * (box_height + 2)
                 
@@ -853,19 +969,7 @@ class StackAdapter:
                 snapshot.boxes.append(pop_node)
         
         # 添加状态提示
-        if stack_size >= stack_capacity:
-            # 栈满提示
-            full_indicator = BoxSnapshot(
-                id="stack_full_indicator",
-                value="栈满！",
-                x=stack_start_x - 50,
-                y=stack_start_y - 30,
-                width=box_width + 100,
-                height=25,
-                color="#FF6B6B"  # 红色
-            )
-            snapshot.boxes.append(full_indicator)
-        elif stack_size == 0:
+        if stack_size == 0:
             # 栈空提示
             empty_indicator = BoxSnapshot(
                 id="stack_empty_indicator",
