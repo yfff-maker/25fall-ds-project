@@ -149,7 +149,7 @@ class SequentialListAdapter:
                 id="length_indicator",
                 value="LEN",
                 x=last_element_x,
-                y=last_element_y - 30,
+                y=last_element_y + box_height + 5,
                 width=box_width,
                 height=25,
                 color="#FF6B6B"  # 红色

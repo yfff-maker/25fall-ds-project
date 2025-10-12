@@ -9,62 +9,64 @@ class StackModel(BaseStructure):
     """栈模型类"""
     
     
-    class StackLL:
-        """自写链表栈，完全避免使用list"""
-        class Node:
-            def __init__(self, v, nxt=None):
-                self.v = v
-                self.nxt = nxt
-        
-        def __init__(self):
-            self.top = None
-            self.n = 0
+    class SequentialStack:
+        """顺序栈实现，使用数组存储"""
+        def __init__(self, capacity=100):
+            self._capacity = capacity
+            self._data = [None] * capacity  # 固定大小数组
+            self._top = -1  # 栈顶索引，-1表示空栈
         
         def push(self, v):
-            self.top = self.Node(v, self.top)
-            self.n += 1
+            if self.is_full():
+                return False
+            self._top += 1
+            self._data[self._top] = v
+            return True
         
         def pop(self):
-            if self.top is None:
+            if self.is_empty():
                 return None
-            v = self.top.v
-            self.top = self.top.nxt
-            self.n -= 1
+            v = self._data[self._top]
+            self._data[self._top] = None
+            self._top -= 1
             return v
         
         def peek(self):
-            return None if self.top is None else self.top.v
+            if self.is_empty():
+                return None
+            return self._data[self._top]
         
         def is_empty(self):
-            return self.top is None
+            return self._top == -1
+        
+        def is_full(self):
+            return self._top == self._capacity - 1
         
         def __len__(self):
-            return self.n
+            return self._top + 1
         
         def to_list(self):
             """转换为自定义链表（用于调试和序列化）"""
             result = CustomList()
-            current = self.top
-            while current:
-                result.append(current.v)
-                current = current.nxt
+            for i in range(self._top + 1):
+                result.append(self._data[i])
             return result
         
         def to_array(self):
             """转换为数组形式（从栈底到栈顶的顺序）"""
-            # 先收集所有元素
-            elements = []
-            current = self.top
-            while current:
-                elements.append(current.v)
-                current = current.nxt
-            # 反转顺序，使栈底元素在索引0，栈顶元素在最后
-            return elements[::-1]
+            return [self._data[i] for i in range(self._top + 1)]
+        
+        def clear(self):
+            """清空栈"""
+            self._top = -1
+            # 清空数组内容
+            for i in range(self._capacity):
+                self._data[i] = None
 
     def __init__(self):
         '''初始化栈'''
         super().__init__()
-        self.data = self.StackLL()
+        self.data = self.SequentialStack()
         self._animation_state = None  # 动画状态：None, 'pushing', 'popping'
         self._new_value = None  # 新值（用于动画显示）
         self._animation_progress = 0.0  # 动画进度：0.0-1.0
@@ -138,8 +140,8 @@ class StackModel(BaseStructure):
         """清空栈"""
         if not self.active:
             return
-        # 重新初始化栈
-        self.data = self.StackLL()
+        # 使用 StackLL 的 clear 方法
+        self.data.clear()
         self._animation_state = None
         self._new_value = None
     
@@ -150,14 +152,14 @@ class StackModel(BaseStructure):
         
         # 检查输入元素数量是否超过栈容量
         values_list = list(values)
-        if len(values_list) > 10:
+        if len(values_list) > self.data._capacity:
             # 设置栈满状态，不执行构建操作
             self._animation_state = 'stack_full'
             self._animation_progress = 0.0
             return
         
         # 清空当前栈
-        self.data = self.StackLL()
+        self.data = self.SequentialStack()
         self._animation_state = None
         self._new_value = None
         
@@ -182,8 +184,12 @@ class StackModel(BaseStructure):
     def complete_push_animation(self):
         """完成入栈动画"""
         if self._animation_state == 'pushing' and self._new_value is not None:
-            self.data.push(self._new_value)
-            self._animation_state = None
+            success = self.data.push(self._new_value)
+            if not success:
+                # 如果入栈失败（栈满），设置栈满状态
+                self._animation_state = 'stack_full'
+            else:
+                self._animation_state = None
             self._new_value = None
             self._animation_progress = 0.0
     

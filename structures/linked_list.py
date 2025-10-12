@@ -30,14 +30,67 @@ class CustomList:
             current.next = new_node
         self.size += 1
     
-    def get(self, index):
-        """获取指定位置的元素"""
+    def get(self, value):
+        """按值查询元素位置索引"""
+        current = self.head
+        index = 0
+        while current:
+            if current.val == value:
+                return index
+            current = current.next
+            index += 1
+        return -1
+    
+    def insert(self, index, val):
+        """在指定位置插入元素"""
+        if index < 0 or index > self.size:
+            return False
+        
+        new_node = ListNode(val)
+        
+        if index == 0:
+            # 在头部插入
+            new_node.next = self.head
+            self.head = new_node
+        else:
+            # 在中间或尾部插入
+            current = self.head
+            for i in range(index - 1):
+                current = current.next
+            new_node.next = current.next
+            current.next = new_node
+        
+        self.size += 1
+        return True
+    
+    def delete(self, index):
+        """删除指定位置的元素"""
         if index < 0 or index >= self.size:
             return None
-        current = self.head
-        for i in range(index):
-            current = current.next
-        return current.val
+        
+        if index == 0:
+            # 删除头节点
+            if self.head:
+                deleted_val = self.head.val
+                self.head = self.head.next
+                self.size -= 1
+                return deleted_val
+        else:
+            # 删除中间或尾节点
+            current = self.head
+            for i in range(index - 1):
+                if current and current.next:
+                    current = current.next
+                else:
+                    return None
+            
+            if current and current.next:
+                deleted_val = current.next.val
+                current.next = current.next.next
+                self.size -= 1
+                return deleted_val
+        
+        return None
     
     def to_array(self):
         """转换为数组形式（用于调试）"""
@@ -216,23 +269,8 @@ class LinkedListModel(BaseStructure):
         if not self.active or position < 0 or position >= len(self.data):
             return
         
-        if position == 0:
-            # 删除头节点
-            if self.data.head:
-                self.data.head = self.data.head.next
-                self.data.size -= 1
-        else:
-            # 删除中间或尾节点
-            current = self.data.head
-            for i in range(position - 1):
-                if current and current.next:
-                    current = current.next
-                else:
-                    return
-            
-            if current and current.next:
-                current.next = current.next.next
-                self.data.size -= 1
+        # 使用 CustomList 的 delete 方法
+        self.data.delete(position)
     
     def insert_at_end(self, value):
         """在末尾插入元素（别名方法）"""
@@ -262,23 +300,7 @@ class LinkedListModel(BaseStructure):
             index = self._insert_position
             value = self._new_value
             
-            if index == len(self.data):
-                # 在末尾插入
-                self.data.append(value)
-            else:
-                # 在中间插入
-                new_node = ListNode(value)
-                if index == 0:
-                    # 在头部插入
-                    new_node.next = self.data.head
-                    self.data.head = new_node
-                else:
-                    # 在中间插入
-                    current = self.data.head
-                    for i in range(index - 1):
-                        current = current.next
-                    new_node.next = current.next
-                    current.next = new_node
-                self.data.size += 1
+            # 使用 CustomList 的 insert 方法
+            self.data.insert(index, value)
             
             self._animation_state = None

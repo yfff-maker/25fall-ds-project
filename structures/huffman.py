@@ -14,31 +14,77 @@ class HuffmanTreeModel(BaseStructure):
             self.left = left
             self.right = right
 
+    class FixedArray:
+        """固定大小数组，替代Python list"""
+        def __init__(self, capacity=1000):
+            self.capacity = capacity
+            self.data = [None] * capacity  # 只在初始化时使用list
+            self.size = 0
+        
+        def append(self, item):
+            if self.size < self.capacity:
+                self.data[self.size] = item
+                self.size += 1
+                return True
+            return False
+        
+        def get(self, index):
+            if 0 <= index < self.size:
+                return self.data[index]
+            return None
+        
+        def set(self, index, item):
+            if 0 <= index < self.size:
+                self.data[index] = item
+                return True
+            return False
+        
+        def swap(self, i, j):
+            if 0 <= i < self.size and 0 <= j < self.size:
+                self.data[i], self.data[j] = self.data[j], self.data[i]
+        
+        def pop_last(self):
+            if self.size > 0:
+                self.size -= 1
+                item = self.data[self.size]
+                self.data[self.size] = None
+                return item
+            return None
+        
+        def is_empty(self):
+            return self.size == 0
+        
+        def __len__(self):
+            return self.size
+
     class MinHeap:
-        """最小堆实现"""
-        def __init__(self):
-            self.heap = []
+        """最小堆实现，使用自定义数组"""
+        def __init__(self, capacity=1000):
+            self.heap = HuffmanTreeModel.FixedArray(capacity)
         
         def push(self, item):
-            self.heap.append(item)
-            self._bubble_up(len(self.heap) - 1)
+            if self.heap.append(item):
+                self._bubble_up(self.heap.size - 1)
+                return True
+            return False
         
         def pop(self):
-            if not self.heap:
+            if self.heap.is_empty():
                 return None
-            if len(self.heap) == 1:
-                return self.heap.pop()
+            if self.heap.size == 1:
+                return self.heap.pop_last()
             
-            min_item = self.heap[0]
-            self.heap[0] = self.heap.pop()
+            min_item = self.heap.get(0)
+            last_item = self.heap.pop_last()
+            self.heap.set(0, last_item)
             self._bubble_down(0)
             return min_item
         
         def _bubble_up(self, index):
             while index > 0:
                 parent = (index - 1) // 2
-                if self.heap[index].freq < self.heap[parent].freq:
-                    self.heap[index], self.heap[parent] = self.heap[parent], self.heap[index]
+                if self.heap.get(index).freq < self.heap.get(parent).freq:
+                    self.heap.swap(index, parent)
                     index = parent
                 else:
                     break
@@ -49,20 +95,20 @@ class HuffmanTreeModel(BaseStructure):
                 right_child = 2 * index + 2
                 smallest = index
                 
-                if left_child < len(self.heap) and self.heap[left_child].freq < self.heap[smallest].freq:
+                if left_child < self.heap.size and self.heap.get(left_child).freq < self.heap.get(smallest).freq:
                     smallest = left_child
                 
-                if right_child < len(self.heap) and self.heap[right_child].freq < self.heap[smallest].freq:
+                if right_child < self.heap.size and self.heap.get(right_child).freq < self.heap.get(smallest).freq:
                     smallest = right_child
                 
                 if smallest == index:
                     break
                 
-                self.heap[index], self.heap[smallest] = self.heap[smallest], self.heap[index]
+                self.heap.swap(index, smallest)
                 index = smallest
         
         def is_empty(self):
-            return len(self.heap) == 0
+            return self.heap.is_empty()
         
         def __len__(self):
             return len(self.heap)
