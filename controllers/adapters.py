@@ -1171,7 +1171,7 @@ class BinaryTreeAdapter:
                     node_type="box",
                     width=60,
                     height=40,
-                    color="#E8F4FD"
+                    color="#1f4e79"  # 深蓝色
                 )
             
             snapshot.nodes.append(node_snapshot)
@@ -1280,58 +1280,195 @@ class BinaryTreeAdapter:
     
 
 class BSTAdapter:
-    """二叉搜索树适配器"""
+    """二叉搜索树适配器 - 使用与链式二叉树相同的布局算法"""
     
     @staticmethod
-    def to_snapshot(bst, start_x=400, y=100, level_height=100, node_spacing=200) -> StructureSnapshot:
-        """将BST转换为快照"""
+    def _calculate_subtree_width(node, node_width=60, min_spacing=20):
+        """递归计算子树所需的最小宽度"""
+        if not node:
+            return 0
+        
+        if not node.left and not node.right:
+            # 叶子节点只需要自身宽度
+            return node_width
+        
+        # 计算左右子树宽度
+        left_width = BSTAdapter._calculate_subtree_width(
+            node.left, node_width, min_spacing)
+        right_width = BSTAdapter._calculate_subtree_width(
+            node.right, node_width, min_spacing)
+        
+        # 当前节点需要的总宽度 = max(自身宽度, 左子树宽度 + 右子树宽度 + 间距)
+        subtree_total_width = left_width + right_width
+        if left_width > 0 and right_width > 0:
+            subtree_total_width += min_spacing
+        
+        return max(node_width, subtree_total_width)
+    
+    @staticmethod
+    def _layout_tree(node, center_x, y, level_height=80, node_width=60, min_spacing=20):
+        """递归布局二叉树，确保子树不重叠"""
+        if not node:
+            return {}
+        
+        positions = {}
+        
+        # 当前节点位置
+        positions[node] = (center_x, y)
+        
+        if not node.left and not node.right:
+            # 叶子节点，直接返回
+            return positions
+        
+        # 计算左右子树需要的宽度
+        left_width = BSTAdapter._calculate_subtree_width(
+            node.left, node_width, min_spacing)
+        right_width = BSTAdapter._calculate_subtree_width(
+            node.right, node_width, min_spacing)
+        
+        # 计算子节点位置
+        if node.left and node.right:
+            # 两个子节点
+            total_child_width = left_width + right_width + min_spacing
+            left_center = center_x - total_child_width / 2 + left_width / 2
+            right_center = center_x + total_child_width / 2 - right_width / 2
+            
+            # 递归布局子树
+            left_positions = BSTAdapter._layout_tree(
+                node.left, left_center, y + level_height, level_height, node_width, min_spacing)
+            right_positions = BSTAdapter._layout_tree(
+                node.right, right_center, y + level_height, level_height, node_width, min_spacing)
+            
+            positions.update(left_positions)
+            positions.update(right_positions)
+            
+        elif node.left:
+            # 只有左子节点
+            left_center = center_x - min_spacing / 2
+            left_positions = BSTAdapter._layout_tree(
+                node.left, left_center, y + level_height, level_height, node_width, min_spacing)
+            positions.update(left_positions)
+            
+        elif node.right:
+            # 只有右子节点
+            right_center = center_x + min_spacing / 2
+            right_positions = BSTAdapter._layout_tree(
+                node.right, right_center, y + level_height, level_height, node_width, min_spacing)
+            positions.update(right_positions)
+        
+        return positions
+    
+    @staticmethod
+    def _add_edges(node, positions, snapshot):
+        """添加树的边连接"""
+        if not node:
+            return
+        
+        node_x, node_y = positions[node]
+        node_id = f"node_{id(node)}"
+        
+        # 添加到左子节点的边
+        if node.left:
+            left_x, left_y = positions[node.left]
+            left_id = f"node_{id(node.left)}"
+            
+            edge = EdgeSnapshot(
+                from_id=node_id,
+                to_id=left_id,
+                color="#2E86AB",
+                arrow_type="line"
+            )
+            # 设置连线坐标
+            edge.from_x = node_x
+            edge.from_y = node_y + 20
+            edge.to_x = left_x
+            edge.to_y = left_y - 20
+            
+            snapshot.edges.append(edge)
+            
+            # 递归处理左子树
+            BSTAdapter._add_edges(node.left, positions, snapshot)
+        
+        # 添加到右子节点的边
+        if node.right:
+            right_x, right_y = positions[node.right]
+            right_id = f"node_{id(node.right)}"
+            
+            edge = EdgeSnapshot(
+                from_id=node_id,
+                to_id=right_id,
+                color="#2E86AB",
+                arrow_type="line"
+            )
+            # 设置连线坐标
+            edge.from_x = node_x
+            edge.from_y = node_y + 20
+            edge.to_x = right_x
+            edge.to_y = right_y - 20
+            
+            snapshot.edges.append(edge)
+            
+            # 递归处理右子树
+            BSTAdapter._add_edges(node.right, positions, snapshot)
+    
+    @staticmethod
+    def to_snapshot(bst, start_x=400, y=100, level_height=80, node_width=60, min_spacing=20) -> StructureSnapshot:
+        """将BST转换为快照 - 使用与链式二叉树相同的布局算法"""
         snapshot = StructureSnapshot()
         snapshot.hint_text = f"二叉搜索树 (节点数: {len(bst.traverse_inorder())})"
         
-        if bst.root:
-            # 使用层序遍历生成节点和边
-            queue = [(bst.root, start_x, y, None)]
-            level = 0
+        if not bst.root:
+            return snapshot
+        
+        # 使用改进的布局算法
+        positions = BSTAdapter._layout_tree(
+            bst.root, start_x, y, level_height, node_width, min_spacing)
+        
+        # 生成节点快照
+        for node, (x, y_pos) in positions.items():
+            node_id = f"node_{id(node)}"
             
-            while queue:
-                next_queue = []
-                level_width = node_spacing * (2 ** level)
-                
-                for i, (node, x, y, parent_id) in enumerate(queue):
-                    if node:
-                        node_id = f"node_{id(node)}"
-                        node_snapshot = NodeSnapshot(
-                            id=node_id,
-                            value=str(node.value),
-                            x=x,
-                            y=y,
-                            node_type="box",
-                            width=60,
-                            height=40
-                        )
-                        snapshot.nodes.append(node_snapshot)
-                        
-                        # 添加边到父节点
-                        if parent_id:
-                            edge = EdgeSnapshot(
-                                from_id=parent_id,
-                                to_id=node_id,
-                                arrow_type="line"
-                            )
-                            snapshot.edges.append(edge)
-                        
-                        # 计算子节点位置
-                        child_spacing = level_width / (2 ** (level + 1))
-                        left_x = x - child_spacing
-                        right_x = x + child_spacing
-                        child_y = y + level_height
-                        
-                        # 添加子节点到下一层队列
-                        next_queue.append((node.left, left_x, child_y, node_id))
-                        next_queue.append((node.right, right_x, child_y, node_id))
-                
-                queue = next_queue
-                level += 1
+            node_snapshot = NodeSnapshot(
+                id=node_id,
+                value=str(node.value),
+                x=x - 30,  # 节点中心对齐
+                y=y_pos - 20,
+                node_type="box",
+                width=60,
+                height=40,
+                color="#1f4e79"  # 深蓝色
+            )
+            snapshot.nodes.append(node_snapshot)
+        
+        # 生成边快照
+        BSTAdapter._add_edges(bst.root, positions, snapshot)
+        
+        # 显示根指针
+        root_pointer_x = start_x - 100
+        root_pointer_y = y
+        root_pointer_box = BoxSnapshot(
+            id="root_pointer",
+            value="root",
+            x=root_pointer_x,
+            y=root_pointer_y,
+            width=60,
+            height=30,
+            color="#FFD700"  # 金色
+        )
+        snapshot.boxes.append(root_pointer_box)
+        
+        # 添加根指针到根节点的连接
+        if bst.root:
+            root_edge = EdgeSnapshot(
+                from_id="root_pointer",
+                to_id=f"node_{id(bst.root)}",
+                arrow_type="arrow"
+            )
+            root_edge.from_x = root_pointer_x + 60
+            root_edge.from_y = root_pointer_y + 15
+            root_edge.to_x = start_x - 30
+            root_edge.to_y = y
+            snapshot.edges.append(root_edge)
         
         return snapshot
 
