@@ -1034,7 +1034,7 @@ class BinaryTreeAdapter:
         # 计算子节点位置
         if node.left and node.right:
             # 两个子节点
-            total_child_width = left_width + right_width + min_spacing
+            total_child_width = left_width + right_width + min_spacing * 1.5
             left_center = center_x - total_child_width / 2 + left_width / 2
             right_center = center_x + total_child_width / 2 - right_width / 2
             
@@ -1083,11 +1083,11 @@ class BinaryTreeAdapter:
                 color="#2E86AB",
                 arrow_type="line"
             )
-            # 设置连线坐标
-            edge.from_x = node_x
-            edge.from_y = node_y + 20
-            edge.to_x = left_x
-            edge.to_y = left_y - 20
+            # 设置连线坐标 - 从红色左指针方框出发，连接到子节点中心
+            edge.from_x = node_x - 60  # 左指针方框位置
+            edge.from_y = node_y - 30  # 左指针方框位置（稍微偏下）
+            edge.to_x = left_x- 40  # 子节点中心x坐标
+            edge.to_y = left_y - 10  # 子节点中心y坐标（稍微偏上）
             
             snapshot.edges.append(edge)
             
@@ -1105,11 +1105,11 @@ class BinaryTreeAdapter:
                 color="#2E86AB",
                 arrow_type="line"
             )
-            # 设置连线坐标
-            edge.from_x = node_x
-            edge.from_y = node_y + 20
-            edge.to_x = right_x
-            edge.to_y = right_y - 20
+            # 设置连线坐标 - 从绿色右指针方框出发，连接到子节点中心
+            edge.from_x = node_x   # 右指针方框位置
+            edge.from_y = node_y - 30  # 右指针方框位置
+            edge.to_x = right_x-40  # 子节点中心x坐标
+            edge.to_y = right_y -10  # 子节点中心y坐标（稍微偏下）
             
             snapshot.edges.append(edge)
             
@@ -1179,9 +1179,9 @@ class BinaryTreeAdapter:
         # 生成边快照
         BinaryTreeAdapter._add_edges(binary_tree.root, positions, snapshot)
         
-        # 显示根指针
-        root_pointer_x = start_x - 100
-        root_pointer_y = y
+        # 显示根指针 - 放在根节点上方
+        root_pointer_x = start_x - 30  # 与根节点中心对齐
+        root_pointer_y = y - 50  # 在根节点上方
         root_pointer_box = BoxSnapshot(
             id="root_pointer",
             value="root",
@@ -1200,10 +1200,10 @@ class BinaryTreeAdapter:
                 to_id=f"node_{id(binary_tree.root)}",
                 arrow_type="arrow"
             )
-            root_edge.from_x = root_pointer_x + 60
-            root_edge.from_y = root_pointer_y + 15
-            root_edge.to_x = start_x - 30
-            root_edge.to_y = y
+            root_edge.from_x = root_pointer_x + 30  # 从root标签中心
+            root_edge.from_y = root_pointer_y + 30  # 从root标签底部
+            root_edge.to_x = start_x  # 到根节点中心
+            root_edge.to_y = y - 20  # 到根节点顶部
             snapshot.edges.append(root_edge)
         
         # 处理创建根节点动画
@@ -1329,7 +1329,7 @@ class BSTAdapter:
         # 计算子节点位置
         if node.left and node.right:
             # 两个子节点
-            total_child_width = left_width + right_width + min_spacing
+            total_child_width = left_width + right_width + min_spacing * 1.5
             left_center = center_x - total_child_width / 2 + left_width / 2
             right_center = center_x + total_child_width / 2 - right_width / 2
             
@@ -1378,11 +1378,11 @@ class BSTAdapter:
                 color="#2E86AB",
                 arrow_type="line"
             )
-            # 设置连线坐标
-            edge.from_x = node_x
-            edge.from_y = node_y + 20
-            edge.to_x = left_x
-            edge.to_y = left_y - 20
+            # 设置连线坐标 - 从红色左指针方框出发，连接到子节点中心
+            edge.from_x = node_x - 60  # 左指针方框位置
+            edge.from_y = node_y - 30  # 左指针方框位置（稍微偏下）
+            edge.to_x = left_x - 40  # 子节点中心x坐标
+            edge.to_y = left_y - 10  # 子节点中心y坐标（稍微偏上）
             
             snapshot.edges.append(edge)
             
@@ -1400,11 +1400,11 @@ class BSTAdapter:
                 color="#2E86AB",
                 arrow_type="line"
             )
-            # 设置连线坐标
-            edge.from_x = node_x
-            edge.from_y = node_y + 20
-            edge.to_x = right_x
-            edge.to_y = right_y - 20
+            # 设置连线坐标 - 从绿色右指针方框出发，连接到子节点中心
+            edge.from_x = node_x  # 右指针方框位置
+            edge.from_y = node_y - 30  # 右指针方框位置
+            edge.to_x = right_x - 40  # 子节点中心x坐标
+            edge.to_y = right_y - 10  # 子节点中心y坐标（稍微偏下）
             
             snapshot.edges.append(edge)
             
@@ -1417,6 +1417,10 @@ class BSTAdapter:
         snapshot = StructureSnapshot()
         snapshot.hint_text = f"二叉搜索树 (节点数: {len(bst.traverse_inorder())})"
         
+        # 获取动画状态
+        animation_state = getattr(bst, '_animation_state', None)
+        animation_progress = getattr(bst, '_animation_progress', 0.0)
+        
         if not bst.root:
             return snapshot
         
@@ -1428,24 +1432,99 @@ class BSTAdapter:
         for node, (x, y_pos) in positions.items():
             node_id = f"node_{id(node)}"
             
-            node_snapshot = NodeSnapshot(
-                id=node_id,
-                value=str(node.value),
-                x=x - 30,  # 节点中心对齐
-                y=y_pos - 20,
-                node_type="box",
-                width=60,
-                height=40,
-                color="#1f4e79"  # 深蓝色
-            )
+            # 检查是否是动画中的新节点
+            is_new_node = (animation_state == 'inserting' and 
+                          hasattr(bst, '_new_value') and 
+                          str(bst._new_value) == str(node.value))
+            
+            # 检查是否是查找动画中的节点
+            is_searching_node = (animation_state == 'searching' and 
+                               hasattr(bst, '_current_search_node_value') and 
+                               str(bst._current_search_node_value) == str(node.value))
+            is_found_node = (animation_state == 'search_found' and 
+                           hasattr(bst, '_search_result_node_value') and 
+                           str(bst._search_result_node_value) == str(node.value))
+            is_last_searched_node = (animation_state == 'search_not_found' and 
+                                   hasattr(bst, '_last_search_node_value') and 
+                                   str(bst._last_search_node_value) == str(node.value))
+            
+            if is_new_node:
+                # 新节点动画效果
+                target_x, target_y = x, y_pos
+                start_x_anim = x
+                start_y_anim = 50  # 从屏幕上方开始
+                
+                # 使用动画进度插值
+                current_x = start_x_anim + (target_x - start_x_anim) * animation_progress
+                current_y = start_y_anim + (target_y - start_y_anim) * animation_progress
+                
+                node_snapshot = NodeSnapshot(
+                    id=node_id,
+                    value=str(node.value),
+                    x=current_x - 30,  # 节点中心对齐
+                    y=current_y - 20,
+                    node_type="box",
+                    width=60,
+                    height=40,
+                    color="#FF6B6B"  # 红色表示正在插入的节点
+                )
+            elif is_searching_node:
+                # 当前正在比较的节点 - 黄色
+                node_snapshot = NodeSnapshot(
+                    id=node_id,
+                    value=str(node.value),
+                    x=x - 30,  # 节点中心对齐
+                    y=y_pos - 20,
+                    node_type="box",
+                    width=60,
+                    height=40,
+                    color="#FFD700"  # 黄色表示正在比较
+                )
+            elif is_found_node:
+                # 找到的目标节点 - 绿色
+                node_snapshot = NodeSnapshot(
+                    id=node_id,
+                    value=str(node.value),
+                    x=x - 30,  # 节点中心对齐
+                    y=y_pos - 20,
+                    node_type="box",
+                    width=60,
+                    height=40,
+                    color="#00FF00"  # 绿色表示找到
+                )
+            elif is_last_searched_node:
+                # 最后搜索的节点（未找到时）- 橙色
+                node_snapshot = NodeSnapshot(
+                    id=node_id,
+                    value=str(node.value),
+                    x=x - 30,  # 节点中心对齐
+                    y=y_pos - 20,
+                    node_type="box",
+                    width=60,
+                    height=40,
+                    color="#FFA500"  # 橙色表示最后搜索
+                )
+            else:
+                # 普通节点 - 深蓝色
+                node_snapshot = NodeSnapshot(
+                    id=node_id,
+                    value=str(node.value),
+                    x=x - 30,  # 节点中心对齐
+                    y=y_pos - 20,
+                    node_type="box",
+                    width=60,
+                    height=40,
+                    color="#1f4e79"  # 深蓝色
+                )
+            
             snapshot.nodes.append(node_snapshot)
         
         # 生成边快照
         BSTAdapter._add_edges(bst.root, positions, snapshot)
         
-        # 显示根指针
-        root_pointer_x = start_x - 100
-        root_pointer_y = y
+        # 显示根指针 - 放在根节点上方
+        root_pointer_x = start_x - 30  # 与根节点中心对齐
+        root_pointer_y = y - 50  # 在根节点上方
         root_pointer_box = BoxSnapshot(
             id="root_pointer",
             value="root",
@@ -1464,11 +1543,160 @@ class BSTAdapter:
                 to_id=f"node_{id(bst.root)}",
                 arrow_type="arrow"
             )
-            root_edge.from_x = root_pointer_x + 60
-            root_edge.from_y = root_pointer_y + 15
-            root_edge.to_x = start_x - 30
-            root_edge.to_y = y
+            root_edge.from_x = root_pointer_x + 30  # 从root标签中心
+            root_edge.from_y = root_pointer_y + 30  # 从root标签底部
+            root_edge.to_x = start_x  # 到根节点中心
+            root_edge.to_y = y - 20  # 到根节点顶部
             snapshot.edges.append(root_edge)
+        
+        # 处理创建根节点动画
+        if animation_state == 'creating_root':
+            new_value = getattr(bst, '_new_value', None)
+            if new_value is not None:
+                # 计算目标位置（根节点位置）
+                target_x = start_x
+                target_y = y
+                
+                # 计算起始位置（屏幕正上方）
+                start_x_pos = target_x
+                start_y_pos = 50  # 屏幕正上方
+                
+                # 使用线性插值计算当前位置
+                current_x = start_x_pos + (target_x - start_x_pos) * animation_progress
+                current_y = start_y_pos + (target_y - start_y_pos) * animation_progress
+                
+                # 创建动画中的根节点
+                node_snapshot = NodeSnapshot(
+                    id="animating_root",
+                    value=str(new_value),
+                    x=current_x - 30,
+                    y=current_y - 20,
+                    node_type="box",
+                    width=60,
+                    height=40,
+                    color="#FF6B6B"  # 红色表示正在移动
+                )
+                snapshot.nodes.append(node_snapshot)
+        
+        # 处理插入节点动画
+        elif animation_state == 'inserting':
+            new_value = getattr(bst, '_new_value', None)
+            parent_value = getattr(bst, '_parent_value', None)
+            insert_position = getattr(bst, '_insert_position', None)
+            
+            if new_value is not None and parent_value is not None:
+                # 找到父节点位置
+                parent_node = bst.find_node_by_value(parent_value)
+                if parent_node and parent_node in positions:
+                    # 计算父节点的实际位置
+                    parent_x, parent_y = positions[parent_node]
+                    
+                    # 计算目标位置（子节点位置）
+                    if insert_position == 'left':
+                        target_x = parent_x - 100
+                    else:  # right
+                        target_x = parent_x + 100
+                    target_y = parent_y + level_height
+                    
+                    # 计算起始位置（屏幕正上方）
+                    start_x_pos = target_x
+                    start_y_pos = 50  # 屏幕正上方
+                    
+                    # 使用线性插值计算当前位置
+                    current_x = start_x_pos + (target_x - start_x_pos) * animation_progress
+                    current_y = start_y_pos + (target_y - start_y_pos) * animation_progress
+                    
+                    # 创建动画中的新节点
+                    node_snapshot = NodeSnapshot(
+                        id="animating_insert",
+                        value=str(new_value),
+                        x=current_x - 30,
+                        y=current_y - 20,
+                        node_type="box",
+                        width=60,
+                        height=40,
+                        color="#FF6B6B"  # 红色表示正在移动
+                    )
+                    snapshot.nodes.append(node_snapshot)
+        
+        # 处理查找动画提示信息
+        if animation_state == 'searching':
+            search_value = getattr(bst, '_search_value', None)
+            current_node_value = getattr(bst, '_current_search_node_value', None)
+            comparison_result = getattr(bst, '_comparison_result', None)
+            
+            if search_value is not None and current_node_value is not None and comparison_result is not None:
+                # 找到当前比较的节点位置
+                current_node = bst.find_node_by_value(current_node_value)
+                if current_node and current_node in positions:
+                    current_x, current_y = positions[current_node]
+                    
+                    # 创建比较信息提示框
+                    if comparison_result == 'less':
+                        hint_text = f"{search_value} < {current_node_value} → 左"
+                        hint_color = "#FFD700"  # 黄色
+                    elif comparison_result == 'greater':
+                        hint_text = f"{search_value} > {current_node_value} → 右"
+                        hint_color = "#FFD700"  # 黄色
+                    else:  # equal
+                        hint_text = f"{search_value} = {current_node_value} ✓"
+                        hint_color = "#00FF00"  # 绿色
+                    
+                    # 在节点上方显示提示信息
+                    hint_box = BoxSnapshot(
+                        id="search_hint",
+                        value=hint_text,
+                        x=current_x - 60,
+                        y=current_y - 60,
+                        width=120,
+                        height=30,
+                        color=hint_color
+                    )
+                    snapshot.boxes.append(hint_box)
+        
+        elif animation_state == 'search_found':
+            search_value = getattr(bst, '_search_value', None)
+            found_node_value = getattr(bst, '_search_result_node_value', None)
+            
+            if search_value is not None and found_node_value is not None:
+                # 找到目标节点位置
+                found_node = bst.find_node_by_value(found_node_value)
+                if found_node and found_node in positions:
+                    found_x, found_y = positions[found_node]
+                    
+                    # 在节点下方显示成功信息
+                    success_box = BoxSnapshot(
+                        id="search_success",
+                        value=f"找到 {search_value}!",
+                        x=found_x - 40,
+                        y=found_y + 30,
+                        width=80,
+                        height=25,
+                        color="#00FF00"  # 绿色
+                    )
+                    snapshot.boxes.append(success_box)
+        
+        elif animation_state == 'search_not_found':
+            search_value = getattr(bst, '_search_value', None)
+            last_node_value = getattr(bst, '_last_search_node_value', None)
+            
+            if search_value is not None and last_node_value is not None:
+                # 找到最后搜索的节点位置
+                last_node = bst.find_node_by_value(last_node_value)
+                if last_node and last_node in positions:
+                    last_x, last_y = positions[last_node]
+                    
+                    # 在节点下方显示未找到信息
+                    not_found_box = BoxSnapshot(
+                        id="search_not_found",
+                        value=f"未找到 {search_value}",
+                        x=last_x - 50,
+                        y=last_y + 30,
+                        width=100,
+                        height=25,
+                        color="#FFA500"  # 橙色
+                    )
+                    snapshot.boxes.append(not_found_box)
         
         return snapshot
 

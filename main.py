@@ -292,14 +292,26 @@ class MainWindow(QMainWindow):
             for b in (b1,b2,b3,b4): lay.addWidget(b)
 
         elif key == "BST":
+            # 插入功能
             lay.addWidget(input_line)
             b1 = QPushButton("插入")
             b1.clicked.connect(lambda: self.controller.insert_bst(get_value()))
-            b2 = QPushButton("查找")
-            b2.clicked.connect(lambda: self.controller.search_bst(get_value()))
+            lay.addWidget(b1)
+            
+            # 查找功能 - 单独的输入框和按钮
+            search_layout = QHBoxLayout()
+            search_input = QLineEdit()
+            search_input.setPlaceholderText("输入要查找的值")
+            search_btn = QPushButton("查找")
+            search_btn.clicked.connect(lambda: self.controller.search_bst(search_input.text().strip()))
+            search_layout.addWidget(search_input)
+            search_layout.addWidget(search_btn)
+            lay.addLayout(search_layout)
+            
+            # 删除功能
             b3 = QPushButton("删除")
             b3.clicked.connect(lambda: self.controller.delete_bst(get_value()))
-            for b in (b1,b2,b3): lay.addWidget(b)
+            lay.addWidget(b3)
 
         elif key == "HuffmanTree":
             line = QLineEdit()

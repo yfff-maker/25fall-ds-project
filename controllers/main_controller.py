@@ -390,6 +390,53 @@ class MainController(QObject):
             self._update_snapshot()
             self._animation_timer.deleteLater()
     
+    def _update_bst_animation(self, structure):
+        """更新BST动画"""
+        import time
+        
+        if self._animation_start_time == 0:
+            self._animation_start_time = time.time() * 1000  # 转换为毫秒
+        
+        current_time = time.time() * 1000
+        elapsed = current_time - self._animation_start_time
+        
+        # 计算动画进度 (0.0 到 1.0)
+        progress = min(elapsed / self._animation_duration, 1.0)
+        structure.update_animation_progress(progress)
+        
+        # 更新显示
+        self._update_snapshot()
+        
+        # 如果动画完成，停止定时器并完成操作
+        if progress >= 1.0:
+            self._animation_timer.stop()
+            if structure._animation_state == 'creating_root':
+                # 创建根节点
+                structure.root = structure.Node(structure._new_value)
+                structure._animation_state = None
+                structure._animation_progress = 0.0
+                structure._new_value = None
+            elif structure._animation_state == 'inserting':
+                # 插入新节点
+                if structure._parent_value and structure._insert_position:
+                    parent_node = structure.find_node_by_value(structure._parent_value)
+                    if parent_node:
+                        new_node = structure.Node(structure._new_value)
+                        if structure._insert_position == 'left':
+                            parent_node.left = new_node
+                        else:  # right
+                            parent_node.right = new_node
+                
+                structure._animation_state = None
+                structure._animation_progress = 0.0
+                structure._new_value = None
+                structure._parent_value = None
+                structure._insert_position = None
+            
+            # 最终更新显示
+            self._update_snapshot()
+            self._animation_timer.deleteLater()
+    
     def pop_stack(self):
         """出栈"""
         try:
@@ -582,7 +629,19 @@ class MainController(QObject):
             
             structure = self._get_current_structure()
             if structure:
+                # 开始插入动画
                 structure.insert(value)
+                
+                # 使用定时器实现平滑动画
+                from PyQt5.QtCore import QTimer
+                self._animation_timer = QTimer()
+                self._animation_timer.timeout.connect(lambda: self._update_bst_animation(structure))
+                self._animation_timer.start(50)  # 每50ms更新一次
+                
+                # 设置动画总时长
+                self._animation_duration = 1000  # 1秒总时长
+                self._animation_start_time = 0
+                
                 self._update_snapshot()
         except Exception as e:
             self._show_error("插入失败", str(e))
@@ -596,14 +655,55 @@ class MainController(QObject):
             
             structure = self._get_current_structure()
             if structure:
-                result = structure.search(value)
-                if result:
-                    self.hint_updated.emit(f"找到节点: {value}")
+                # 开始查找动画
+                if structure.search_with_animation(value):
+                    # 使用定时器实现平滑动画
+                    from PyQt5.QtCore import QTimer
+                    self._animation_timer = QTimer()
+                    self._animation_timer.timeout.connect(lambda: self._update_bst_search_animation(structure))
+                    self._animation_timer.start(50)  # 每50ms更新一次
+                    
+                    # 设置动画总时长
+                    self._animation_duration = 2000  # 2秒总时长（查找需要更多时间）
+                    self._animation_start_time = 0
+                    
+                    self._update_snapshot()
                 else:
-                    self.hint_updated.emit(f"未找到节点: {value}")
-                self._update_snapshot()
+                    self._show_warning("树为空或值无效")
         except Exception as e:
             self._show_error("搜索失败", str(e))
+    
+    def _update_bst_search_animation(self, structure):
+        """更新BST查找动画"""
+        import time
+        
+        if self._animation_start_time == 0:
+            self._animation_start_time = time.time() * 1000  # 转换为毫秒
+        
+        current_time = time.time() * 1000
+        elapsed = current_time - self._animation_start_time
+        
+        # 计算动画进度 (0.0 到 1.0)
+        progress = min(elapsed / self._animation_duration, 1.0)
+        structure.update_search_animation(progress)
+        
+        # 更新显示
+        self._update_snapshot()
+        
+        # 如果动画完成，停止定时器
+        if progress >= 1.0:
+            self._animation_timer.stop()
+            structure.complete_search_animation()
+            
+            # 显示查找结果
+            if structure._animation_state == 'search_found':
+                self.hint_updated.emit(f"找到节点: {structure._search_value}")
+            elif structure._animation_state == 'search_not_found':
+                self.hint_updated.emit(f"未找到节点: {structure._search_value}")
+            
+            # 最终更新显示
+            self._update_snapshot()
+            self._animation_timer.deleteLater()
     
     def delete_bst(self, value: str):
         """删除BST节点"""
