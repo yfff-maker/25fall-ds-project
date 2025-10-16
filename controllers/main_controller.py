@@ -402,7 +402,12 @@ class MainController(QObject):
         
         # 计算动画进度 (0.0 到 1.0)
         progress = min(elapsed / self._animation_duration, 1.0)
-        structure.update_animation_progress(progress)
+        
+        # 根据动画状态选择不同的更新方法
+        if structure._animation_state == 'inserting':
+            structure.update_insert_animation(progress)
+        else:
+            structure.update_animation_progress(progress)
         
         # 更新显示
         self._update_snapshot()

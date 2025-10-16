@@ -988,7 +988,7 @@ class BinaryTreeAdapter:
     """改进的二叉树适配器 - 使用递归子树宽度计算"""
     
     @staticmethod
-    def _calculate_subtree_width(node, node_width=60, min_spacing=20):
+    def _calculate_subtree_width(node, node_width=60, min_spacing=100):
         """递归计算子树所需的最小宽度"""
         if not node:
             return 0
@@ -1011,7 +1011,7 @@ class BinaryTreeAdapter:
         return max(node_width, subtree_total_width)
     
     @staticmethod
-    def _layout_tree(node, center_x, y, level_height=80, node_width=60, min_spacing=20):
+    def _layout_tree(node, center_x, y, level_height=80, node_width=60, min_spacing=100):
         """递归布局二叉树，确保子树不重叠"""
         if not node:
             return {}
@@ -1117,7 +1117,7 @@ class BinaryTreeAdapter:
             BinaryTreeAdapter._add_edges(node.right, positions, snapshot)
     
     @staticmethod
-    def to_snapshot(binary_tree, start_x=400, y=100, level_height=80, node_width=60, min_spacing=20) -> StructureSnapshot:
+    def to_snapshot(binary_tree, start_x=640, y=200, level_height=80, node_width=60, min_spacing=100) -> StructureSnapshot:
         """将二叉树转换为快照 - 使用改进的布局算法"""
         snapshot = StructureSnapshot()
         snapshot.hint_text = f"二叉树 (节点数: {len(binary_tree.get_all_node_values())})"
@@ -1283,7 +1283,7 @@ class BSTAdapter:
     """二叉搜索树适配器 - 使用与链式二叉树相同的布局算法"""
     
     @staticmethod
-    def _calculate_subtree_width(node, node_width=60, min_spacing=20):
+    def _calculate_subtree_width(node, node_width=60, min_spacing=100):
         """递归计算子树所需的最小宽度"""
         if not node:
             return 0
@@ -1301,12 +1301,12 @@ class BSTAdapter:
         # 当前节点需要的总宽度 = max(自身宽度, 左子树宽度 + 右子树宽度 + 间距)
         subtree_total_width = left_width + right_width
         if left_width > 0 and right_width > 0:
-            subtree_total_width += min_spacing
+            subtree_total_width += min_spacing*1.5
         
         return max(node_width, subtree_total_width)
     
     @staticmethod
-    def _layout_tree(node, center_x, y, level_height=80, node_width=60, min_spacing=20):
+    def _layout_tree(node, center_x, y, level_height=80, node_width=60, min_spacing=100):
         """递归布局二叉树，确保子树不重叠"""
         if not node:
             return {}
@@ -1412,7 +1412,7 @@ class BSTAdapter:
             BSTAdapter._add_edges(node.right, positions, snapshot)
     
     @staticmethod
-    def to_snapshot(bst, start_x=400, y=100, level_height=80, node_width=60, min_spacing=20) -> StructureSnapshot:
+    def to_snapshot(bst, start_x=640, y=200, level_height=80, node_width=60, min_spacing=100) -> StructureSnapshot:
         """将BST转换为快照 - 使用与链式二叉树相同的布局算法"""
         snapshot = StructureSnapshot()
         snapshot.hint_text = f"二叉搜索树 (节点数: {len(bst.traverse_inorder())})"
@@ -1420,6 +1420,28 @@ class BSTAdapter:
         # 获取动画状态
         animation_state = getattr(bst, '_animation_state', None)
         animation_progress = getattr(bst, '_animation_progress', 0.0)
+        
+        # 添加比较信息
+        if animation_state == 'inserting' and hasattr(bst, '_insert_comparison_result') and bst._insert_comparison_result:
+            if bst._insert_comparison_result == 'less':
+                snapshot.comparison_text = f"新值 {bst._insert_value} < 当前值 {bst._current_search_node_value} → 左"
+            elif bst._insert_comparison_result == 'greater':
+                snapshot.comparison_text = f"新值 {bst._insert_value} > 当前值 {bst._current_search_node_value} → 右"
+            else:
+                snapshot.comparison_text = f"新值 {bst._insert_value} = 当前值 {bst._current_search_node_value} → 已存在"
+        elif animation_state == 'searching' and hasattr(bst, '_comparison_result') and bst._comparison_result:
+            if bst._comparison_result == 'less':
+                snapshot.comparison_text = f"查找值 {bst._search_value} < 当前值 {bst._current_search_node_value} → 左"
+            elif bst._comparison_result == 'greater':
+                snapshot.comparison_text = f"查找值 {bst._search_value} > 当前值 {bst._current_search_node_value} → 右"
+            else:
+                snapshot.comparison_text = f"查找值 {bst._search_value} = 当前值 {bst._current_search_node_value} → 找到！"
+        elif animation_state == 'search_found':
+            snapshot.comparison_text = f"找到目标值: {bst._search_value}"
+        elif animation_state == 'search_not_found':
+            snapshot.comparison_text = f"未找到目标值: {bst._search_value}"
+        else:
+            snapshot.comparison_text = ""
         
         if not bst.root:
             return snapshot
@@ -1448,6 +1470,11 @@ class BSTAdapter:
                                    hasattr(bst, '_last_search_node_value') and 
                                    str(bst._last_search_node_value) == str(node.value))
             
+            # 检查是否是插入比较动画中的节点
+            is_insert_comparing_node = (animation_state == 'inserting' and 
+                                      hasattr(bst, '_current_search_node_value') and 
+                                      str(bst._current_search_node_value) == str(node.value))
+            
             if is_new_node:
                 # 新节点动画效果
                 target_x, target_y = x, y_pos
@@ -1468,7 +1495,7 @@ class BSTAdapter:
                     height=40,
                     color="#FF6B6B"  # 红色表示正在插入的节点
                 )
-            elif is_searching_node:
+            elif is_searching_node or is_insert_comparing_node:
                 # 当前正在比较的节点 - 黄色
                 node_snapshot = NodeSnapshot(
                     id=node_id,
@@ -1704,7 +1731,7 @@ class HuffmanTreeAdapter:
     """哈夫曼树适配器 - 支持构建动画"""
     
     @staticmethod
-    def to_snapshot(huffman_tree, start_x=400, y=100, level_height=120, node_spacing=200) -> StructureSnapshot:
+    def to_snapshot(huffman_tree, start_x=640, y=200, level_height=120, node_spacing=200) -> StructureSnapshot:
         """将哈夫曼树转换为快照 - 支持构建动画"""
         snapshot = StructureSnapshot()
         

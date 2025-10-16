@@ -37,6 +37,12 @@ class BSTModel(BaseStructure):
         self._last_search_node_value = None  # 最后访问的节点值（失败时）
         self._search_path = []  # 查找路径（节点值列表）
         self._current_search_step = 0  # 当前查找步骤
+        
+        # 插入动画相关属性
+        self._insert_value = None  # 要插入的值
+        self._insert_path = []  # 插入路径（节点值列表）
+        self._current_insert_step = 0  # 当前插入步骤
+        self._insert_comparison_result = None  # 插入比较结果
 
     def insert(self, value):
         """插入节点到BST"""
@@ -63,6 +69,13 @@ class BSTModel(BaseStructure):
                 self._parent_value = parent_node.value
                 self._insert_position = position
                 self._animation_progress = 0.0
+                
+                # 计算插入路径用于比较动画
+                self._insert_value = v
+                self._insert_path = self._calculate_insert_path(self.root, v)
+                self._current_insert_step = 0
+                self._insert_comparison_result = None
+                
                 # 不立即插入，等动画完成后再插入
             else:
                 # 值已存在，直接返回
@@ -304,6 +317,26 @@ class BSTModel(BaseStructure):
         
         return path
     
+    def _calculate_insert_path(self, node, value):
+        """计算插入路径（用于比较动画）"""
+        path = []
+        current = node
+        
+        while current:
+            path.append(current.value)
+            if value < current.value:
+                if current.left is None:
+                    break  # 到达插入位置
+                current = current.left
+            elif value > current.value:
+                if current.right is None:
+                    break  # 到达插入位置
+                current = current.right
+            else:
+                break  # 值已存在
+        
+        return path
+    
     def update_search_animation(self, progress):
         """更新查找动画进度"""
         if self._animation_state != 'searching':
@@ -340,6 +373,34 @@ class BSTModel(BaseStructure):
         if self._animation_progress >= 1.0 and self._comparison_result != 'equal':
             self._animation_state = 'search_not_found'
             self._last_search_node_value = self._search_path[-1] if self._search_path else None
+    
+    def update_insert_animation(self, progress):
+        """更新插入动画进度"""
+        if self._animation_state != 'inserting':
+            return
+        
+        self._animation_progress = max(0.0, min(1.0, progress))
+        
+        # 根据进度计算当前步骤
+        total_steps = len(self._insert_path)
+        if total_steps == 0:
+            return
+        
+        # 计算当前步骤（基于进度）
+        current_step = int(self._animation_progress * total_steps)
+        current_step = min(current_step, total_steps - 1)
+        
+        if current_step < len(self._insert_path):
+            self._current_insert_step = current_step
+            self._current_search_node_value = self._insert_path[current_step]
+            
+            # 计算比较结果
+            if self._insert_value < self._current_search_node_value:
+                self._insert_comparison_result = 'less'
+            elif self._insert_value > self._current_search_node_value:
+                self._insert_comparison_result = 'greater'
+            else:
+                self._insert_comparison_result = 'equal'
     
     def complete_search_animation(self):
         """完成查找动画"""

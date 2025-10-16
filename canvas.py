@@ -65,6 +65,15 @@ class Canvas(QObject):
         self.hint_label.setDefaultTextColor(Qt.gray)
         self.hint_label.setPos(10, 10)
         self.scene.addItem(self.hint_label)
+        
+        # 比较信息标签（右下角）
+        self.comparison_label = QGraphicsTextItem("")
+        self.comparison_label.setDefaultTextColor(Qt.blue)
+        font = QFont()
+        font.setPointSize(12)
+        font.setBold(True)
+        self.comparison_label.setFont(font)
+        self.scene.addItem(self.comparison_label)
 
         self.animator = Animator(self.scene)
         
@@ -79,6 +88,18 @@ class Canvas(QObject):
 
     def set_hint(self, text: str):
         self.hint_label.setPlainText(text)
+    
+    def set_comparison_info(self, text: str):
+        """设置比较信息（右下角显示）"""
+        self.comparison_label.setPlainText(text)
+        # 计算右下角位置
+        if text:
+            rect = self.comparison_label.boundingRect()
+            x = self.view.width() - rect.width() - 20
+            y = self.view.height() - rect.height() - 20
+            self.comparison_label.setPos(x, y)
+        else:
+            self.comparison_label.setPos(0, 0)
 
     def render_snapshot(self, snapshot):
         """根据快照渲染数据结构"""
@@ -91,6 +112,12 @@ class Canvas(QObject):
         # 更新提示文本
         if snapshot.hint_text:
             self.set_hint(snapshot.hint_text)
+        
+        # 更新比较信息
+        if hasattr(snapshot, 'comparison_text') and snapshot.comparison_text:
+            self.set_comparison_info(snapshot.comparison_text)
+        else:
+            self.set_comparison_info("")
         
         # 渲染方框（用于数组等）
         for box in snapshot.boxes:
@@ -198,10 +225,10 @@ class Canvas(QObject):
             self.scene.addItem(line)
 
     def clear_scene(self):
-        """清除场景中的所有项目（除了提示标签）"""
+        """清除场景中的所有项目（除了提示标签和比较信息标签）"""
         items = self.scene.items()
         for item in items:
-            if item != self.hint_label:
+            if item != self.hint_label and item != self.comparison_label:
                 self.scene.removeItem(item)
 
     # 保留原有的工具方法，用于向后兼容
