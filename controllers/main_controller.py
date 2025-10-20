@@ -53,6 +53,9 @@ class MainController(QObject):
         }
         
         self.current_structure_key = "SequentialList"
+        self._huffman_animation_paused = False  # 哈夫曼树动画暂停状态
+        self._huffman_animation_paused_time = 0  # 暂停时的时间
+        self._huffman_animation_pause_offset = 0  # 暂停时间偏移
         self._update_snapshot()
     
     def select_structure(self, key: str):
@@ -734,8 +737,98 @@ class MainController(QObject):
             if structure:
                 structure.build(freq_dict)
                 self._update_snapshot()
+                
+                # 开始哈夫曼树构建动画
+                if hasattr(structure, '_animation_state') and structure._animation_state == 'building':
+                    from PyQt5.QtCore import QTimer
+                    self._huffman_animation_timer = QTimer()
+                    self._huffman_animation_timer.timeout.connect(lambda: self._update_huffman_animation(structure))
+                    self._huffman_animation_timer.start(500)  # 每500ms更新一次
+                    self._huffman_animation_duration = 10000  # 10秒总时长
+                    self._huffman_animation_start_time = 0
+                    self._huffman_animation_pause_offset = 0  # 重置暂停偏移
+                    self._huffman_animation_paused = False  # 重置暂停状态
+                    print(f"哈夫曼树动画已启动，频率映射: {freq_dict}")
+                else:
+                    print(f"哈夫曼树动画未启动，动画状态: {getattr(structure, '_animation_state', 'None')}")
         except Exception as e:
             self._show_error("构建哈夫曼树失败", str(e))
+            print(f"构建哈夫曼树错误: {e}")
+    
+    def _update_huffman_animation(self, structure):
+        """更新哈夫曼树构建动画"""
+        try:
+            import time
+            
+            if self._huffman_animation_start_time == 0:
+                self._huffman_animation_start_time = time.time() * 1000  # 转换为毫秒
+            
+            current_time = time.time() * 1000
+            elapsed = current_time - self._huffman_animation_start_time - self._huffman_animation_pause_offset
+            
+            # 计算动画进度 (0.0 到 1.0)
+            progress = min(elapsed / self._huffman_animation_duration, 1.0)
+            
+            # 更新结构的动画进度
+            structure.update_animation_progress(progress)
+            
+            # 更新显示
+            self._update_snapshot()
+            
+            # 调试信息
+            if int(progress * 100) % 10 == 0:  # 每10%打印一次
+                print(f"哈夫曼树动画进度: {int(progress * 100)}%")
+            
+            # 如果动画完成，停止定时器
+            if progress >= 1.0:
+                self._huffman_animation_timer.stop()
+                structure._animation_state = None
+                structure._animation_progress = 1.0
+                self._update_snapshot()
+                self._huffman_animation_timer.deleteLater()
+                print("哈夫曼树构建完成")
+        except Exception as e:
+            print(f"哈夫曼树动画更新错误: {e}")
+            # 停止定时器防止无限错误
+            if hasattr(self, '_huffman_animation_timer') and self._huffman_animation_timer:
+                self._huffman_animation_timer.stop()
+                self._huffman_animation_timer.deleteLater()
+    
+    def pause_huffman_animation(self):
+        """暂停哈夫曼树动画"""
+        import time
+        if hasattr(self, '_huffman_animation_timer') and self._huffman_animation_timer:
+            if not self._huffman_animation_paused:
+                self._huffman_animation_timer.stop()
+                self._huffman_animation_paused = True
+                self._huffman_animation_paused_time = time.time() * 1000
+                self.hint_updated.emit("哈夫曼树动画已暂停")
+    
+    def resume_huffman_animation(self):
+        """恢复哈夫曼树动画"""
+        import time
+        if hasattr(self, '_huffman_animation_timer') and self._huffman_animation_timer:
+            if self._huffman_animation_paused:
+                # 计算暂停时间偏移
+                current_time = time.time() * 1000
+                pause_duration = current_time - self._huffman_animation_paused_time
+                self._huffman_animation_pause_offset += pause_duration
+                
+                self._huffman_animation_timer.start(500)  # 重新开始定时器
+                self._huffman_animation_paused = False
+                self.hint_updated.emit("哈夫曼树动画已恢复")
+    
+    def step_huffman_animation(self):
+        """哈夫曼树动画单步执行"""
+        if hasattr(self, '_huffman_animation_timer') and self._huffman_animation_timer:
+            # 暂停动画
+            if not self._huffman_animation_paused:
+                self.pause_huffman_animation()
+            
+            # 手动执行一步
+            structure = self._get_current_structure()
+            if structure and hasattr(structure, '_animation_state') and structure._animation_state == 'building':
+                self._update_huffman_animation(structure)
     
     # ========== 工具方法 ==========
     
@@ -755,12 +848,19 @@ class MainController(QObject):
         freq = {}
         if text.strip():
             for pair in text.split(","):
+                pair = pair.strip()
                 if ":" in pair:
                     k, v = pair.split(":", 1)
+                    k = k.strip()
+                    v = v.strip()
                     try:
-                        freq[k.strip()] = int(v.strip())
+                        freq[k] = int(v)
                     except ValueError:
-                        pass
+                        print(f"警告: 无法解析 '{pair}'，跳过")
+                        continue
+                else:
+                    print(f"警告: 格式错误 '{pair}'，应为 '字符:频率'")
+                    continue
         return freq
     
     def _update_linked_list_animation(self, structure):

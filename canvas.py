@@ -74,6 +74,22 @@ class Canvas(QObject):
         font.setBold(True)
         self.comparison_label.setFont(font)
         self.scene.addItem(self.comparison_label)
+        
+        # 步骤说明标签（右下角）
+        self.step_details_label = QGraphicsTextItem("")
+        self.step_details_label.setDefaultTextColor(Qt.darkGreen)
+        font = QFont()
+        font.setPointSize(10)
+        self.step_details_label.setFont(font)
+        self.scene.addItem(self.step_details_label)
+        
+        # 操作历史记录标签（左侧）
+        self.operation_history_label = QGraphicsTextItem("")
+        self.operation_history_label.setDefaultTextColor(Qt.darkBlue)
+        font = QFont()
+        font.setPointSize(9)
+        self.operation_history_label.setFont(font)
+        self.scene.addItem(self.operation_history_label)
 
         self.animator = Animator(self.scene)
         
@@ -100,6 +116,33 @@ class Canvas(QObject):
             self.comparison_label.setPos(x, y)
         else:
             self.comparison_label.setPos(0, 0)
+    
+    def set_step_details(self, details: list):
+        """设置步骤说明（右下角显示）"""
+        if details:
+            # 将步骤说明列表转换为多行文本
+            text = "\n".join(details)
+            self.step_details_label.setPlainText(text)
+            # 计算右下角位置
+            rect = self.step_details_label.boundingRect()
+            x = self.view.width() - rect.width() - 20
+            y = self.view.height() - rect.height() - 20
+            self.step_details_label.setPos(x, y)
+        else:
+            self.step_details_label.setPlainText("")
+            self.step_details_label.setPos(0, 0)
+    
+    def set_operation_history(self, history: list):
+        """设置操作历史记录（左侧显示）"""
+        if history:
+            # 将操作历史列表转换为多行文本
+            text = "\n".join(history)
+            self.operation_history_label.setPlainText(text)
+            # 设置左侧位置
+            self.operation_history_label.setPos(10, 60)  # 在提示文本下方
+        else:
+            self.operation_history_label.setPlainText("")
+            self.operation_history_label.setPos(0, 0)
 
     def render_snapshot(self, snapshot):
         """根据快照渲染数据结构"""
@@ -118,6 +161,18 @@ class Canvas(QObject):
             self.set_comparison_info(snapshot.comparison_text)
         else:
             self.set_comparison_info("")
+        
+        # 更新步骤说明
+        if hasattr(snapshot, 'step_details') and snapshot.step_details:
+            self.set_step_details(snapshot.step_details)
+        else:
+            self.set_step_details([])
+        
+        # 更新操作历史记录
+        if hasattr(snapshot, 'operation_history') and snapshot.operation_history:
+            self.set_operation_history(snapshot.operation_history)
+        else:
+            self.set_operation_history([])
         
         # 渲染方框（用于数组等）
         for box in snapshot.boxes:
@@ -225,10 +280,10 @@ class Canvas(QObject):
             self.scene.addItem(line)
 
     def clear_scene(self):
-        """清除场景中的所有项目（除了提示标签和比较信息标签）"""
+        """清除场景中的所有项目（除了提示标签、比较信息标签、步骤说明标签和操作历史标签）"""
         items = self.scene.items()
         for item in items:
-            if item != self.hint_label and item != self.comparison_label:
+            if item != self.hint_label and item != self.comparison_label and item != self.step_details_label and item != self.operation_history_label:
                 self.scene.removeItem(item)
 
     # 保留原有的工具方法，用于向后兼容

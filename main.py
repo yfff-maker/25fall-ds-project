@@ -91,9 +91,9 @@ class MainWindow(QMainWindow):
         self.select_structure("SequentialList")
 
         # wire control panel
-        self.ctrl_panel.playClicked.connect(self.canvas.animator_play)
-        self.ctrl_panel.pauseClicked.connect(self.canvas.animator_pause)
-        self.ctrl_panel.stepClicked.connect(self.canvas.animator_step)
+        self.ctrl_panel.playClicked.connect(self._handle_play_clicked)
+        self.ctrl_panel.pauseClicked.connect(self._handle_pause_clicked)
+        self.ctrl_panel.stepClicked.connect(self._handle_step_clicked)
         self.ctrl_panel.speedChanged.connect(self.canvas.animator_speed)
 
     '''左侧分组按钮（顺序表/链表/栈/树/BST/哈夫曼）及其点击事件绑定到 select_structure(...)'''
@@ -315,7 +315,8 @@ class MainWindow(QMainWindow):
 
         elif key == "HuffmanTree":
             line = QLineEdit()
-            line.setPlaceholderText('输入频率映射，如: a:5,b:7,c:2')
+            line.setPlaceholderText('输入频率映射，如: A:25,B:15,C:27,D:5,E:30')
+            line.setText('A:25,B:15,C:27,D:5,E:30')  # 设置默认值
             lay.addWidget(line)
             b1 = QPushButton("构建哈夫曼树")
             def build():
@@ -370,6 +371,33 @@ class MainWindow(QMainWindow):
         # 这个方法会被控制器调用，用于处理需要用户选择父节点的情况
         # 这里可以显示一个对话框让用户选择父节点
         pass
+    
+    def _handle_play_clicked(self):
+        """处理播放按钮点击"""
+        if self.controller.current_structure_key == "HuffmanTree":
+            # 哈夫曼树动画控制
+            self.controller.resume_huffman_animation()
+        else:
+            # 其他数据结构的动画控制
+            self.canvas.animator_play()
+    
+    def _handle_pause_clicked(self):
+        """处理暂停按钮点击"""
+        if self.controller.current_structure_key == "HuffmanTree":
+            # 哈夫曼树动画控制
+            self.controller.pause_huffman_animation()
+        else:
+            # 其他数据结构的动画控制
+            self.canvas.animator_pause()
+    
+    def _handle_step_clicked(self):
+        """处理单步按钮点击"""
+        if self.controller.current_structure_key == "HuffmanTree":
+            # 哈夫曼树动画控制
+            self.controller.step_huffman_animation()
+        else:
+            # 其他数据结构的动画控制
+            self.canvas.animator_step()
 
 def main():
     app = QApplication(sys.argv)
