@@ -43,6 +43,15 @@ class BSTModel(BaseStructure):
         self._insert_path = []  # 插入路径（节点值列表）
         self._current_insert_step = 0  # 当前插入步骤
         self._insert_comparison_result = None  # 插入比较结果
+        
+        # 删除动画相关属性
+        self._delete_value = None  # 要删除的值
+        self._delete_path = []  # 删除路径（节点值列表）
+        self._current_delete_step = 0  # 当前删除步骤
+        self._delete_comparison_result = None  # 删除比较结果
+        self._delete_target_node = None  # 要删除的目标节点
+        self._delete_replacement_node = None  # 替换节点（用于两子节点情况）
+        self._delete_case = None  # 删除情况：'no_children', 'one_child', 'two_children'
 
     def insert(self, value):
         """插入节点到BST"""
@@ -146,7 +155,27 @@ class BSTModel(BaseStructure):
         except:
             v = value
         
-        self.root = self._delete_node(self.root, v)
+        # 检查节点是否存在
+        if not self._search_node(self.root, v):
+            self._animation_state = 'delete_not_found'
+            self._delete_value = v
+            self._animation_progress = 0.0
+            return
+        
+        # 开始删除动画
+        self._animation_state = 'deleting'
+        self._delete_value = v
+        self._animation_progress = 0.0
+        
+        # 计算删除路径
+        self._delete_path = self._calculate_delete_path(self.root, v)
+        self._current_delete_step = 0
+        self._delete_comparison_result = None
+        self._delete_target_node = None
+        self._delete_replacement_node = None
+        self._delete_case = None  # 'no_children', 'one_child', 'two_children'
+        
+        # 不立即删除，等动画完成后再删除
 
     def _delete_node(self, node, value):
         """递归删除节点"""
@@ -337,6 +366,22 @@ class BSTModel(BaseStructure):
         
         return path
     
+    def _calculate_delete_path(self, node, value):
+        """计算删除路径（用于比较动画）"""
+        path = []
+        current = node
+        
+        while current:
+            path.append(current.value)
+            if value < current.value:
+                current = current.left
+            elif value > current.value:
+                current = current.right
+            else:
+                break  # 找到要删除的节点
+        
+        return path
+    
     def update_search_animation(self, progress):
         """更新查找动画进度"""
         if self._animation_state != 'searching':
@@ -402,6 +447,61 @@ class BSTModel(BaseStructure):
             else:
                 self._insert_comparison_result = 'equal'
     
+    def update_delete_animation(self, progress):
+        """更新删除动画进度"""
+        if self._animation_state != 'deleting':
+            return
+        
+        self._animation_progress = max(0.0, min(1.0, progress))
+        
+        # 根据进度计算当前步骤
+        total_steps = len(self._delete_path)
+        if total_steps == 0:
+            return
+        
+        # 计算当前步骤（基于进度）
+        current_step = int(self._animation_progress * total_steps)
+        current_step = min(current_step, total_steps - 1)
+        
+        if current_step < len(self._delete_path):
+            self._current_delete_step = current_step
+            self._current_search_node_value = self._delete_path[current_step]
+            
+            # 计算比较结果
+            if self._delete_value < self._current_search_node_value:
+                self._delete_comparison_result = 'less'
+            elif self._delete_value > self._current_search_node_value:
+                self._delete_comparison_result = 'greater'
+            else:
+                self._delete_comparison_result = 'equal'
+                # 找到要删除的节点，分析删除情况
+                self._analyze_delete_case()
+    
+    def _analyze_delete_case(self):
+        """分析删除情况"""
+        if not self._delete_path:
+            return
+        
+        # 找到要删除的节点
+        target_value = self._delete_path[-1]
+        target_node = self._find_node(self.root, target_value)
+        
+        if not target_node:
+            return
+        
+        self._delete_target_node = target_value
+        
+        # 分析删除情况
+        if not target_node.left and not target_node.right:
+            self._delete_case = 'no_children'
+        elif not target_node.left or not target_node.right:
+            self._delete_case = 'one_child'
+        else:
+            self._delete_case = 'two_children'
+            # 找到右子树的最小值
+            min_node = self._find_min(target_node.right)
+            self._delete_replacement_node = min_node.value
+    
     def complete_search_animation(self):
         """完成查找动画"""
         if self._animation_state in ['search_found', 'search_not_found']:
@@ -418,3 +518,65 @@ class BSTModel(BaseStructure):
             self._search_path = []
             self._current_search_step = 0
             self._animation_progress = 0.0
+    
+    def complete_delete_animation(self):
+        """完成删除动画"""
+        if self._animation_state == 'deleting' and self._delete_value is not None:
+            # 执行实际的删除操作
+            self.root = self._delete_node(self.root, self._delete_value)
+            
+            # 重置删除动画状态
+            self._animation_state = None
+            self._delete_value = None
+            self._delete_path = []
+            self._current_delete_step = 0
+            self._delete_comparison_result = None
+            self._delete_target_node = None
+            self._delete_replacement_node = None
+            self._delete_case = None
+            self._animation_progress = 0.0
+        elif self._animation_state == 'delete_not_found':
+            # 节点不存在的情况
+            self._animation_state = None
+            self._delete_value = None
+            self._animation_progress = 0.0
+
+    # ===== 序列化 =====
+    def _node_to_dict(self, node):
+        if node is None:
+            return None
+        return {
+            "value": node.value,
+            "left": self._node_to_dict(node.left),
+            "right": self._node_to_dict(node.right),
+        }
+
+    def _dict_to_node(self, data):
+        if not data:
+            return None
+        node = BSTModel.Node(data.get("value"))
+        node.left = self._dict_to_node(data.get("left"))
+        node.right = self._dict_to_node(data.get("right"))
+        return node
+
+    def to_dict(self) -> dict:
+        return {
+            "root": self._node_to_dict(self.root)
+        }
+
+    def from_dict(self, data: dict) -> None:
+        self.root = self._dict_to_node(data.get("root"))
+        # 清理动画状态
+        self._animation_state = None
+        self._animation_progress = 0.0
+        self._new_node = None
+        self._new_value = None
+        self._parent_value = None
+        self._insert_position = None
+        self._search_value = None
+        self._current_search_node_value = None
+        self._comparison_result = None
+        self._search_result_node_value = None
+        self._last_search_node_value = None
+        self._search_path = []
+        self._current_search_step = 0

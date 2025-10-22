@@ -304,3 +304,24 @@ class LinkedListModel(BaseStructure):
             self.data.insert(index, value)
             
             self._animation_state = None
+    
+    # ===== 序列化 =====
+    def to_dict(self) -> dict:
+        elements = list(self.data.to_array()) if hasattr(self.data, 'to_array') else list(self.data)
+        return {
+            "elements": elements,
+        }
+
+    def from_dict(self, data: dict) -> None:
+        # 清空后逐个 append 重建
+        self.data = CustomList()
+        elements = data.get("elements", []) or []
+        for v in elements:
+            self.data.append(v)
+        # 清理动画状态
+        self._animation_state = None
+        self._animation_progress = 0.0
+        self._new_value = None
+        self._insert_position = 0
+        self._delete_position = 0
+        self._deleted_value = None

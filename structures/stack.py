@@ -217,3 +217,21 @@ class StackModel(BaseStructure):
         """设置动画目标位置"""
         self._target_x = target_x
         self._target_y = target_y
+
+    # ===== 序列化 =====
+    def to_dict(self) -> dict:
+        return {
+            "elements": self.data.to_array(),
+            "capacity": self.data._capacity,
+        }
+
+    def from_dict(self, data: dict) -> None:
+        capacity = int(data.get("capacity", 100) or 100)
+        self.data = self.SequentialStack(capacity)
+        elements = data.get("elements", []) or []
+        for v in elements:
+            self.data.push(v)
+        # 清理动画状态
+        self._animation_state = None
+        self._new_value = None
+        self._animation_progress = 0.0

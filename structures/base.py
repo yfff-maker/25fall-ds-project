@@ -16,3 +16,12 @@ class BaseStructure:
     def is_active(self) -> bool:
         """获取激活状态"""
         return self.active
+
+    # ===== 序列化接口 ===== #
+    def to_dict(self) -> dict:
+        """导出可序列化的纯数据字典。子类必须实现。"""
+        raise NotImplementedError
+
+    def from_dict(self, data: dict) -> None:
+        """从字典恢复内部状态。子类必须实现。"""
+        raise NotImplementedError

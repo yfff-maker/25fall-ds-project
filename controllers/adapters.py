@@ -1439,6 +1439,11 @@ class BSTAdapter:
         animation_state = getattr(bst, '_animation_state', None)
         animation_progress = getattr(bst, '_animation_progress', 0.0)
         
+        # 添加删除动画的步骤说明
+        if animation_state == 'deleting':
+            step_details = BSTAdapter._get_delete_step_details(bst, animation_progress)
+            snapshot.step_details = step_details
+        
         # 添加比较信息
         if animation_state == 'inserting' and hasattr(bst, '_insert_comparison_result') and bst._insert_comparison_result:
             if bst._insert_comparison_result == 'less':
@@ -1458,6 +1463,15 @@ class BSTAdapter:
             snapshot.comparison_text = f"找到目标值: {bst._search_value}"
         elif animation_state == 'search_not_found':
             snapshot.comparison_text = f"未找到目标值: {bst._search_value}"
+        elif animation_state == 'deleting' and hasattr(bst, '_delete_comparison_result') and bst._delete_comparison_result:
+            if bst._delete_comparison_result == 'less':
+                snapshot.comparison_text = f"删除值 {bst._delete_value} < 当前值 {bst._current_search_node_value} → 左"
+            elif bst._delete_comparison_result == 'greater':
+                snapshot.comparison_text = f"删除值 {bst._delete_value} > 当前值 {bst._current_search_node_value} → 右"
+            else:
+                snapshot.comparison_text = f"删除值 {bst._delete_value} = 当前值 {bst._current_search_node_value} → 找到要删除的节点"
+        elif animation_state == 'delete_not_found':
+            snapshot.comparison_text = f"未找到要删除的值: {bst._delete_value}"
         else:
             snapshot.comparison_text = ""
         
@@ -1492,6 +1506,17 @@ class BSTAdapter:
             is_insert_comparing_node = (animation_state == 'inserting' and 
                                       hasattr(bst, '_current_search_node_value') and 
                                       str(bst._current_search_node_value) == str(node.value))
+            
+            # 检查是否是删除动画中的节点
+            is_deleting_node = (animation_state == 'deleting' and 
+                              hasattr(bst, '_current_search_node_value') and 
+                              str(bst._current_search_node_value) == str(node.value))
+            is_delete_target_node = (animation_state == 'deleting' and 
+                                   hasattr(bst, '_delete_target_node') and 
+                                   str(bst._delete_target_node) == str(node.value))
+            is_delete_replacement_node = (animation_state == 'deleting' and 
+                                        hasattr(bst, '_delete_replacement_node') and 
+                                        str(bst._delete_replacement_node) == str(node.value))
             
             if is_new_node:
                 # 新节点动画效果
@@ -1548,6 +1573,42 @@ class BSTAdapter:
                     width=60,
                     height=40,
                     color="#FFA500"  # 橙色表示最后搜索
+                )
+            elif is_deleting_node:
+                # 当前正在比较的删除节点 - 黄色
+                node_snapshot = NodeSnapshot(
+                    id=node_id,
+                    value=str(node.value),
+                    x=x - 30,  # 节点中心对齐
+                    y=y_pos - 20,
+                    node_type="box",
+                    width=60,
+                    height=40,
+                    color="#FFD700"  # 黄色表示正在比较
+                )
+            elif is_delete_target_node:
+                # 要删除的目标节点 - 红色
+                node_snapshot = NodeSnapshot(
+                    id=node_id,
+                    value=str(node.value),
+                    x=x - 30,  # 节点中心对齐
+                    y=y_pos - 20,
+                    node_type="box",
+                    width=60,
+                    height=40,
+                    color="#FF0000"  # 红色表示要删除的节点
+                )
+            elif is_delete_replacement_node:
+                # 替换节点（两子节点情况）- 蓝色
+                node_snapshot = NodeSnapshot(
+                    id=node_id,
+                    value=str(node.value),
+                    x=x - 30,  # 节点中心对齐
+                    y=y_pos - 20,
+                    node_type="box",
+                    width=60,
+                    height=40,
+                    color="#0000FF"  # 蓝色表示替换节点
                 )
             else:
                 # 普通节点 - 深蓝色
@@ -1744,6 +1805,59 @@ class BSTAdapter:
                     snapshot.boxes.append(not_found_box)
         
         return snapshot
+    
+    @staticmethod
+    def _get_delete_step_details(bst, progress):
+        """生成删除动画的步骤说明"""
+        details = []
+        delete_value = getattr(bst, '_delete_value', None)
+        current_node = getattr(bst, '_current_search_node_value', None)
+        comparison_result = getattr(bst, '_delete_comparison_result', None)
+        delete_case = getattr(bst, '_delete_case', None)
+        target_node = getattr(bst, '_delete_target_node', None)
+        replacement_node = getattr(bst, '_delete_replacement_node', None)
+        
+        if not delete_value:
+            return details
+        
+        if comparison_result == 'less':
+            details = [
+                f"删除值 {delete_value} < 当前节点 {current_node}",
+                "→ 继续在左子树中查找",
+                f"进度: {int(progress * 100)}%"
+            ]
+        elif comparison_result == 'greater':
+            details = [
+                f"删除值 {delete_value} > 当前节点 {current_node}",
+                "→ 继续在右子树中查找",
+                f"进度: {int(progress * 100)}%"
+            ]
+        elif comparison_result == 'equal':
+            details = [
+                f"找到要删除的节点: {target_node}",
+                f"分析删除情况: {delete_case}",
+                f"进度: {int(progress * 100)}%"
+            ]
+            
+            if delete_case == 'no_children':
+                details.extend([
+                    "• 该节点没有子节点",
+                    "• 直接删除即可"
+                ])
+            elif delete_case == 'one_child':
+                details.extend([
+                    "• 该节点有一个子节点",
+                    "• 用子节点替换该节点"
+                ])
+            elif delete_case == 'two_children':
+                details.extend([
+                    "• 该节点有两个子节点",
+                    f"• 找到右子树最小值: {replacement_node}",
+                    "• 用最小值替换该节点",
+                    "• 删除原最小值节点"
+                ])
+        
+        return details
 
 class HuffmanTreeAdapter:
     """哈夫曼树适配器 - 支持构建动画"""

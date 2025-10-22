@@ -364,3 +364,44 @@ class HuffmanTreeModel(BaseStructure):
         # 完成构建
         self._animation_state = None
         self._animation_progress = 1.0
+
+    # ===== 序列化 =====
+    def _node_to_dict(self, node):
+        if node is None:
+            return None
+        return {
+            "freq": node.freq,
+            "char": node.char,
+            "left": self._node_to_dict(node.left),
+            "right": self._node_to_dict(node.right),
+        }
+
+    def _dict_to_node(self, data):
+        if not data:
+            return None
+        node = HuffmanTreeModel.Node(data.get("freq"), char=data.get("char"))
+        node.left = self._dict_to_node(data.get("left"))
+        node.right = self._dict_to_node(data.get("right"))
+        return node
+
+    def to_dict(self) -> dict:
+        # 优先保存频率映射，若不可用则保存树结构
+        payload = {}
+        if hasattr(self, '_original_freq_map') and self._original_freq_map:
+            payload["freq_map"] = dict(self._original_freq_map)
+        else:
+            payload["root"] = self._node_to_dict(self.root)
+        return payload
+
+    def from_dict(self, data: dict) -> None:
+        freq_map = data.get("freq_map")
+        if freq_map:
+            # 走标准构建流程（带动画变量会被重置为初始）
+            self.build(freq_map)
+            # 直接完成构建（不强制动画复现）
+            self._complete_build_animation()
+        else:
+            # 回退：直接还原树
+            self.root = self._dict_to_node(data.get("root"))
+            self._animation_state = None
+            self._animation_progress = 0.0

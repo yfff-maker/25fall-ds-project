@@ -3,7 +3,7 @@ import sys
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QGroupBox,
     QPushButton, QLabel, QLineEdit, QDockWidget, QFrame, QMessageBox,
-    QHBoxLayout, QSpinBox, QDialog, QComboBox
+    QHBoxLayout, QSpinBox, QDialog, QComboBox, QFileDialog, QAction
 )
 from PyQt5.QtCore import Qt, pyqtSlot
 from canvas import Canvas
@@ -81,6 +81,7 @@ class MainWindow(QMainWindow):
         # 初始化控制器
         '''控制器层'''
         self.controller = MainController() # ← 组合关系：MainWindow 持有 MainController 实例
+        self.current_file_path = None  # 记住当前文件路径
         
         # 连接控制器信号
         self.controller.snapshot_updated.connect(self.canvas.render_snapshot)
@@ -89,6 +90,9 @@ class MainWindow(QMainWindow):
 
         # 选择默认数据结构
         self.select_structure("SequentialList")
+
+        # 构建菜单栏
+        self._build_menubar()
 
         # wire control panel
         self.ctrl_panel.playClicked.connect(self._handle_play_clicked)
@@ -146,6 +150,61 @@ class MainWindow(QMainWindow):
         self.left_layout.addWidget(group_tree)
         self.left_layout.addWidget(self.dynamic_container, 1)
         self.left_layout.addStretch(1)
+
+    def _build_menubar(self):
+        menubar = self.menuBar()
+        file_menu = menubar.addMenu("文件")
+
+        act_open = QAction("打开...", self)
+        act_open.setShortcut("Ctrl+O")
+        act_open.triggered.connect(self._action_open)
+        file_menu.addAction(act_open)
+
+        act_save = QAction("保存", self)
+        act_save.setShortcut("Ctrl+S")
+        act_save.triggered.connect(self._action_save)
+        file_menu.addAction(act_save)
+
+        act_save_as = QAction("另存为...", self)
+        act_save_as.setShortcut("Ctrl+Shift+S")
+        act_save_as.triggered.connect(self._action_save_as)
+        file_menu.addAction(act_save_as)
+
+    def _action_open(self):
+        path, _ = QFileDialog.getOpenFileName(self, "打开工程", "", "Data Structure Vis (*.dsv);;JSON (*.json);;All Files (*)")
+        if not path:
+            return
+        try:
+            self.controller.load_from_file(path)
+            self.current_file_path = path  # 记住打开的文件路径
+            self.setWindowTitle(f"数据结构可视化模拟器 - {path}")
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"打开失败: {e}")
+
+    def _action_save(self):
+        if self.current_file_path:
+            # 如果有当前文件路径，直接保存
+            try:
+                self.controller.save_to_file(self.current_file_path)
+            except Exception as e:
+                QMessageBox.critical(self, "错误", f"保存失败: {e}")
+        else:
+            # 否则调用另存为
+            self._action_save_as()
+
+    def _action_save_as(self):
+        path, _ = QFileDialog.getSaveFileName(self, "保存工程", "", "Data Structure Vis (*.dsv);;JSON (*.json);;All Files (*)")
+        if not path:
+            return
+        try:
+            # 默认加后缀 .dsv
+            if not (path.endswith('.dsv') or path.endswith('.json')):
+                path = path + '.dsv'
+            self.controller.save_to_file(path)
+            self.current_file_path = path  # 记住保存的文件路径
+            self.setWindowTitle(f"数据结构可视化模拟器 - {path}")
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"保存失败: {e}")
 
     def _clear_dynamic_panel(self):
         while self.dynamic_layout.count():

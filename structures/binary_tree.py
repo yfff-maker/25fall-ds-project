@@ -209,3 +209,36 @@ class BinaryTreeModel(BaseStructure):
         """设置动画目标位置"""
         self._target_x = target_x
         self._target_y = target_y
+
+    # ===== 序列化 =====
+    def _node_to_dict(self, node):
+        if node is None:
+            return None
+        return {
+            "value": node.value,
+            "left": self._node_to_dict(node.left),
+            "right": self._node_to_dict(node.right),
+        }
+
+    def _dict_to_node(self, data):
+        if not data:
+            return None
+        node = BinaryTreeModel.Node(data.get("value"))
+        node.left = self._dict_to_node(data.get("left"))
+        node.right = self._dict_to_node(data.get("right"))
+        return node
+
+    def to_dict(self) -> dict:
+        return {
+            "root": self._node_to_dict(self.root)
+        }
+
+    def from_dict(self, data: dict) -> None:
+        self.root = self._dict_to_node(data.get("root"))
+        # 清理动画状态
+        self._animation_state = None
+        self._animation_progress = 0.0
+        self._new_node = None
+        self._new_value = None
+        self._parent_value = None
+        self._insert_position = None

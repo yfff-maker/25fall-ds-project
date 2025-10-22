@@ -269,3 +269,24 @@ class SequentialListModel(BaseStructure):
     def get_size(self):
         """获取当前元素个数"""
         return self.data.size
+
+    # ===== 序列化 =====
+    def to_dict(self) -> dict:
+        elements = list(self.data.to_list())
+        return {
+            "elements": elements,
+            "capacity": self.data.capacity,
+        }
+
+    def from_dict(self, data: dict) -> None:
+        # 清空并按给定容量重建
+        capacity = int(data.get("capacity", 100) or 100)
+        self.data = self.SequentialArray(capacity)
+        elements = data.get("elements", []) or []
+        for v in elements:
+            self.data.append(v)
+        # 清理动画状态
+        self._animation_state = None
+        self._new_value = None
+        self._animation_progress = 0.0
+        self._insert_position = 0

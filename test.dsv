@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "current_structure_key": "SequentialList",
+  "structures": {
+    "SequentialList": {
+      "elements": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "capacity": 100
+    },
+    "LinkedList": {
+      "elements": []
+    },
+    "Stack": {
+      "elements": [],
+      "capacity": 100
+    },
+    "BinaryTree": {
+      "root": null
+    },
+    "BST": {
+      "root": null
+    },
+    "HuffmanTree": {
+      "root": null
+    }
+  }
+}

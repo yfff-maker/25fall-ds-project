@@ -58,6 +58,55 @@ class MainController(QObject):
         self._huffman_animation_pause_offset = 0  # 暂停时间偏移
         self._update_snapshot()
     
+    # ====== 序列化：保存/加载 ======
+    def save_to_file(self, path: str) -> None:
+        """保存当前所有数据结构状态到 .dsv(JSON) 文件"""
+        try:
+            data = {
+                "version": 1,
+                "current_structure_key": self.current_structure_key,
+                "structures": {
+                    key: struct.to_dict() for key, struct in self.structures.items()
+                }
+            }
+            import json
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            self.hint_updated.emit(f"已保存到: {path}")
+        except Exception as e:
+            self._show_error("保存失败", str(e))
+
+    def load_from_file(self, path: str) -> None:
+        """从 .dsv(JSON) 文件加载数据结构状态"""
+        try:
+            import json
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            if not isinstance(data, dict) or data.get("version") != 1:
+                raise ValueError("文件版本不兼容或格式错误")
+
+            # 恢复各结构
+            structures_payload = data.get("structures", {}) or {}
+            for key, struct in self.structures.items():
+                payload = structures_payload.get(key)
+                if payload is not None:
+                    struct.from_dict(payload)
+                else:
+                    # 如果缺失，重置为空状态
+                    if hasattr(struct, 'clear'):
+                        struct.clear()
+
+            # 恢复当前结构选择
+            key = data.get("current_structure_key")
+            if key in self.structures:
+                self.current_structure_key = key
+
+            # 刷新视图
+            self._update_snapshot()
+            self.hint_updated.emit(f"已从文件加载: {path}")
+        except Exception as e:
+            self._show_error("加载失败", str(e))
+
     def select_structure(self, key: str):
         """选择数据结构"""
         if key in self.structures:
@@ -713,6 +762,38 @@ class MainController(QObject):
             self._update_snapshot()
             self._animation_timer.deleteLater()
     
+    def _update_bst_delete_animation(self, structure):
+        """更新BST删除动画"""
+        import time
+        
+        if self._animation_start_time == 0:
+            self._animation_start_time = time.time() * 1000  # 转换为毫秒
+        
+        current_time = time.time() * 1000
+        elapsed = current_time - self._animation_start_time
+        
+        # 计算动画进度 (0.0 到 1.0)
+        progress = min(elapsed / self._animation_duration, 1.0)
+        structure.update_delete_animation(progress)
+        
+        # 更新显示
+        self._update_snapshot()
+        
+        # 如果动画完成，停止定时器
+        if progress >= 1.0:
+            self._animation_timer.stop()
+            structure.complete_delete_animation()
+            
+            # 显示删除结果
+            if structure._animation_state == 'delete_not_found':
+                self.hint_updated.emit(f"未找到节点: {structure._delete_value}")
+            else:
+                self.hint_updated.emit(f"已删除节点: {structure._delete_value}")
+            
+            # 最终更新显示
+            self._update_snapshot()
+            self._animation_timer.deleteLater()
+    
     def delete_bst(self, value: str):
         """删除BST节点"""
         try:
@@ -722,7 +803,19 @@ class MainController(QObject):
             
             structure = self._get_current_structure()
             if structure:
+                # 开始删除动画
                 structure.delete(value)
+                
+                # 使用定时器实现平滑动画
+                from PyQt5.QtCore import QTimer
+                self._animation_timer = QTimer()
+                self._animation_timer.timeout.connect(lambda: self._update_bst_delete_animation(structure))
+                self._animation_timer.start(50)  # 每50ms更新一次
+                
+                # 设置动画总时长
+                self._animation_duration = 2000  # 2秒总时长（删除需要更多时间）
+                self._animation_start_time = 0
+                
                 self._update_snapshot()
         except Exception as e:
             self._show_error("删除失败", str(e))
