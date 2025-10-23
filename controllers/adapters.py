@@ -2870,3 +2870,296 @@ class HuffmanTreeAdapter:
             
             # 递归添加右子树的边
             HuffmanTreeAdapter._add_edges(node.right, snapshot, start_x + node_spacing * (2 ** level) / 2, y, level_height, node_spacing, level + 1)
+
+
+class AVLAdapter:
+    """AVL树适配器 - 支持平衡因子显示和旋转动画"""
+    
+    @staticmethod
+    def _layout_tree(node, start_x, y, level_height, node_width, min_spacing):
+        """计算AVL树节点位置 - 使用与BST相同的布局算法"""
+        if not node:
+            return {}
+        
+        positions = {}
+        
+        def calculate_positions(current_node, x, y_pos, level):
+            if not current_node:
+                return x
+            
+            # 计算左子树宽度
+            left_width = 0
+            if current_node.left:
+                left_width = AVLAdapter._calculate_subtree_width(current_node.left, node_width, min_spacing)
+            
+            # 当前节点位置
+            current_x = x + left_width
+            positions[current_node] = (current_x, y_pos)
+            
+            # 递归计算子节点位置
+            if current_node.left:
+                calculate_positions(current_node.left, x, y_pos + level_height, level + 1)
+            if current_node.right:
+                calculate_positions(current_node.right, current_x + node_width + min_spacing, y_pos + level_height, level + 1)
+            
+            return current_x
+        
+        calculate_positions(node, start_x, y, 0)
+        return positions
+    
+    @staticmethod
+    def _calculate_subtree_width(node, node_width, min_spacing):
+        """计算子树宽度"""
+        if not node:
+            return 0
+        
+        left_width = AVLAdapter._calculate_subtree_width(node.left, node_width, min_spacing)
+        right_width = AVLAdapter._calculate_subtree_width(node.right, node_width, min_spacing)
+        
+        return left_width + node_width + right_width + (min_spacing if node.left or node.right else 0)
+    
+    @staticmethod
+    def _add_edges(node, positions, snapshot):
+        """添加树的边连接"""
+        if not node:
+            return
+        
+        node_x, node_y = positions[node]
+        node_id = f"node_{id(node)}"
+        
+        # 添加到左子节点的边
+        if node.left:
+            left_x, left_y = positions[node.left]
+            left_id = f"node_{id(node.left)}"
+            
+            edge = EdgeSnapshot(
+                from_id=node_id,
+                to_id=left_id,
+                color="#2E86AB",
+                arrow_type="line"
+            )
+            # 设置连线坐标 - 从红色左指针方框出发，连接到子节点中心
+            edge.from_x = node_x - 60  # 左指针方框位置
+            edge.from_y = node_y - 30  # 左指针方框位置（稍微偏下）
+            edge.to_x = left_x - 40  # 子节点中心x坐标
+            edge.to_y = left_y - 10  # 子节点中心y坐标（稍微偏上）
+            
+            snapshot.edges.append(edge)
+            
+            # 递归处理左子树
+            AVLAdapter._add_edges(node.left, positions, snapshot)
+        
+        # 添加到右子节点的边
+        if node.right:
+            right_x, right_y = positions[node.right]
+            right_id = f"node_{id(node.right)}"
+            
+            edge = EdgeSnapshot(
+                from_id=node_id,
+                to_id=right_id,
+                color="#2E86AB",
+                arrow_type="line"
+            )
+            # 设置连线坐标 - 从绿色右指针方框出发，连接到子节点中心
+            edge.from_x = node_x  # 右指针方框位置
+            edge.from_y = node_y - 30  # 右指针方框位置
+            edge.to_x = right_x - 40  # 子节点中心x坐标
+            edge.to_y = right_y - 10  # 子节点中心y坐标（稍微偏下）
+            
+            snapshot.edges.append(edge)
+            
+            # 递归处理右子树
+            AVLAdapter._add_edges(node.right, positions, snapshot)
+    
+    @staticmethod
+    def to_snapshot(avl, start_x=640, y=200, level_height=80, node_width=60, min_spacing=100) -> StructureSnapshot:
+        """将AVL树转换为快照 - 支持平衡因子显示和旋转动画"""
+        snapshot = StructureSnapshot()
+        snapshot.hint_text = f"AVL平衡二叉树 (节点数: {len(avl.traverse_inorder())})"
+        
+        # 获取动画状态
+        animation_state = getattr(avl, '_animation_state', None)
+        animation_progress = getattr(avl, '_animation_progress', 0.0)
+        
+        # 添加比较信息
+        if animation_state == 'inserting' and hasattr(avl, '_insert_comparison_result') and avl._insert_comparison_result:
+            if avl._insert_comparison_result == 'less':
+                snapshot.comparison_text = f"新值 {avl._new_value} < 当前值 {avl._current_search_node_value} → 左"
+            elif avl._insert_comparison_result == 'greater':
+                snapshot.comparison_text = f"新值 {avl._new_value} > 当前值 {avl._current_search_node_value} → 右"
+            else:
+                snapshot.comparison_text = f"新值 {avl._new_value} = 当前值 {avl._current_search_node_value} → 已存在"
+        else:
+            snapshot.comparison_text = ""
+        
+        # 添加旋转类型提示
+        if hasattr(avl, '_rotation_type') and avl._rotation_type:
+            snapshot.step_details = f"旋转类型: {avl._rotation_type}型"
+        
+        if not avl.root:
+            return snapshot
+        
+        # 使用改进的布局算法
+        positions = AVLAdapter._layout_tree(
+            avl.root, start_x, y, level_height, node_width, min_spacing)
+        
+        # 生成节点快照
+        for node, (x, y_pos) in positions.items():
+            node_id = f"node_{id(node)}"
+            
+            # 计算平衡因子
+            balance_factor = avl._get_balance_factor(node)
+            is_checking = (hasattr(avl, '_current_check_node_value') and 
+                           avl._current_check_node_value is not None and 
+                           str(avl._current_check_node_value) == str(node.value))
+            
+            # 检查是否是动画中的新节点
+            is_new_node = (animation_state == 'inserting' and 
+                          hasattr(avl, '_new_value') and 
+                          str(avl._new_value) == str(node.value))
+            
+            # 检查是否是插入比较动画中的节点
+            is_insert_comparing_node = (animation_state == 'inserting' and 
+                                      hasattr(avl, '_current_search_node_value') and 
+                                      str(avl._current_search_node_value) == str(node.value))
+            
+            # 检查是否是旋转动画中的节点
+            is_rotating_node = (hasattr(avl, '_rotation_nodes') and 
+                              node.value in avl._rotation_nodes)
+            
+            # 确定节点颜色和边框
+            if is_new_node:
+                node_color = "#FF6B6B"  # 红色表示正在插入的节点
+                border_color = None
+            elif is_insert_comparing_node:
+                node_color = "#FFA500"  # 橙色表示正在比较的节点
+                border_color = None
+            elif abs(balance_factor) > 1:
+                node_color = "#1f4e79"  # 深蓝色表示失衡节点
+                border_color = "#FF6B6B"  # 红色边框表示失衡
+            elif is_rotating_node:
+                node_color = "#FFA500"  # 橙色表示参与旋转的节点
+                border_color = "#FFA500"  # 橙色边框
+            else:
+                node_color = "#1f4e79"  # 深蓝色表示正常节点
+                border_color = None
+            
+            # 处理旋转动画中的位置插值
+            if is_rotating_node and hasattr(avl, '_rotation_type') and avl._rotation_type:
+                # 根据旋转类型计算弧线轨迹
+                current_x, current_y = AVLAdapter._calculate_rotation_position(
+                    node, x, y_pos, avl._rotation_type, animation_progress)
+            else:
+                current_x, current_y = x, y_pos
+            
+            node_snapshot = NodeSnapshot(
+                id=node_id,
+                value=str(node.value),
+                x=current_x - 30,  # 节点中心对齐
+                y=current_y - 20,
+                node_type="box",
+                width=60,
+                height=40,
+                color=node_color
+            )
+            
+            # 添加边框颜色属性（检查节点优先金色）
+            if is_checking:
+                node_snapshot.border_color = "#FFD700"
+                node_snapshot.border_width = 3
+            elif border_color:
+                node_snapshot.border_color = border_color
+                node_snapshot.border_width = 3
+            
+            snapshot.nodes.append(node_snapshot)
+            
+            # 添加平衡因子标签
+            bf_text = f"平衡因子={balance_factor}"
+            if is_checking:
+                bf_text += "（检查中）"
+            balance_label = BoxSnapshot(
+                id=f"balance_{node_id}",
+                value=bf_text,
+                x=current_x + 50,  # 节点右侧
+                y=current_y - 10,  # 节点上方
+                width=80,
+                height=20,
+                color="#8B4513" if abs(balance_factor) <= 1 else "#FF6B6B",  # 褐色正常，红色失衡
+                text_color="#FFFFFF"
+            )
+            snapshot.boxes.append(balance_label)
+        
+        # 生成边快照
+        AVLAdapter._add_edges(avl.root, positions, snapshot)
+        
+        # 显示根指针 - 放在根节点上方
+        root_pointer_x = start_x - 30  # 与根节点中心对齐
+        root_pointer_y = y - 50  # 在根节点上方
+        root_pointer_box = BoxSnapshot(
+            id="root_pointer",
+            value="root",
+            x=root_pointer_x,
+            y=root_pointer_y,
+            width=60,
+            height=30,
+            color="#FFD700",  # 金色
+            text_color="#000000"
+        )
+        snapshot.boxes.append(root_pointer_box)
+        
+        # 添加根指针箭头
+        root_arrow = EdgeSnapshot(
+            from_id="root_pointer",
+            to_id=f"node_{id(avl.root)}",
+            color="#FFD700",
+            arrow_type="arrow"
+        )
+        root_arrow.from_x = root_pointer_x + 30
+        root_arrow.from_y = root_pointer_y + 30
+        root_arrow.to_x = start_x
+        root_arrow.to_y = y - 20
+        snapshot.edges.append(root_arrow)
+        
+        return snapshot
+    
+    @staticmethod
+    def _calculate_rotation_position(node, base_x, base_y, rotation_type, progress):
+        """计算旋转动画中的节点位置"""
+        if not hasattr(AVLAdapter, '_rotation_centers'):
+            AVLAdapter._rotation_centers = {}
+        
+        # 根据旋转类型计算弧线轨迹
+        if rotation_type == 'LL':
+            # 右旋：左子节点上移，父节点下移
+            if progress < 0.5:
+                # 前半段：左子节点沿弧线上移
+                angle = progress * 2 * 3.14159  # 0 到 π
+                radius = 50
+                offset_x = radius * (1 - abs(progress - 0.5) * 2)
+                offset_y = -radius * abs(progress - 0.5) * 2
+            else:
+                # 后半段：父节点沿弧线下移
+                angle = (progress - 0.5) * 2 * 3.14159  # 0 到 π
+                radius = 50
+                offset_x = -radius * (progress - 0.5) * 2
+                offset_y = radius * (progress - 0.5) * 2
+        elif rotation_type == 'RR':
+            # 左旋：右子节点上移，父节点下移
+            if progress < 0.5:
+                # 前半段：右子节点沿弧线上移
+                angle = progress * 2 * 3.14159
+                radius = 50
+                offset_x = -radius * (1 - abs(progress - 0.5) * 2)
+                offset_y = -radius * abs(progress - 0.5) * 2
+            else:
+                # 后半段：父节点沿弧线下移
+                angle = (progress - 0.5) * 2 * 3.14159
+                radius = 50
+                offset_x = radius * (progress - 0.5) * 2
+                offset_y = radius * (progress - 0.5) * 2
+        else:
+            # LR 和 RL 类型使用更复杂的轨迹
+            offset_x = 0
+            offset_y = 0
+        
+        return base_x + offset_x, base_y + offset_y

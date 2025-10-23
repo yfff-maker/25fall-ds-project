@@ -134,6 +134,10 @@ class MainWindow(QMainWindow):
         btn_bst.clicked.connect(lambda: self.select_structure("BST"))
         gt.addWidget(btn_bst)
 
+        btn_avl = QPushButton("平衡二叉树 AVL")
+        btn_avl.clicked.connect(lambda: self.select_structure("AVL"))
+        gt.addWidget(btn_avl)
+
         btn_hf = QPushButton("哈夫曼树 HuffmanTree")
         btn_hf.clicked.connect(lambda: self.select_structure("HuffmanTree"))
         gt.addWidget(btn_hf)
@@ -370,6 +374,31 @@ class MainWindow(QMainWindow):
             # 删除功能
             b3 = QPushButton("删除")
             b3.clicked.connect(lambda: self.controller.delete_bst(get_value()))
+            lay.addWidget(b3)
+
+        elif key == "AVL":
+            # 插入功能
+            lay.addWidget(input_line)
+            b1 = QPushButton("插入")
+            b1.clicked.connect(lambda: self.controller.insert_avl(get_value()))
+            lay.addWidget(b1)
+            
+            # 批量构建功能
+            build_line = QLineEdit()
+            build_line.setPlaceholderText("批量插入：如 7,19,16,27,9,5,14,11,17,12")
+            lay.addWidget(build_line)
+            btn_build = QPushButton("批量构建")
+            def build_avl():
+                values = build_line.text().strip().split(',')
+                for value in values:
+                    if value.strip():
+                        self.controller.insert_avl(value.strip())
+            btn_build.clicked.connect(build_avl)
+            lay.addWidget(btn_build)
+            
+            # 清空功能
+            b3 = QPushButton("清空树")
+            b3.clicked.connect(lambda: self.controller.clear_avl())
             lay.addWidget(b3)
 
         elif key == "HuffmanTree":

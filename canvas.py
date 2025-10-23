@@ -240,7 +240,15 @@ class Canvas(QObject):
         # 主方框
         main_box = QGraphicsRectItem(0, 0, node.width or BOX_NODE_WIDTH, node.height or BOX_NODE_HEIGHT)
         main_box.setBrush(QBrush(QColor(node.color)))
-        main_box.setPen(QPen(Qt.black, 2))
+        
+        # 支持边框颜色（用于失衡节点高亮）
+        border_color = getattr(node, 'border_color', None)
+        border_width = getattr(node, 'border_width', 2)
+        if border_color:
+            main_box.setPen(QPen(QColor(border_color), border_width))
+        else:
+            main_box.setPen(QPen(Qt.black, border_width))
+        
         main_box.setPos(node.x - (node.width or BOX_NODE_WIDTH)/2, node.y - (node.height or BOX_NODE_HEIGHT)/2)
         
         # 左连接点

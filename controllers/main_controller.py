@@ -11,10 +11,11 @@ from structures.linked_list import LinkedListModel
 from structures.stack import StackModel
 from structures.binary_tree import BinaryTreeModel
 from structures.bst import BSTModel
+from structures.avl import AVLModel
 from structures.huffman import HuffmanTreeModel
 from .adapters import (
     SequentialListAdapter, LinkedListAdapter, StackAdapter,
-    BinaryTreeAdapter, BSTAdapter, HuffmanTreeAdapter,
+    BinaryTreeAdapter, BSTAdapter, AVLAdapter, HuffmanTreeAdapter,
     StructureSnapshot
 )
 
@@ -35,6 +36,7 @@ class MainController(QObject):
             "Stack": StackModel(),
             "BinaryTree": BinaryTreeModel(),
             "BST": BSTModel(),
+            "AVL": AVLModel(),
             "HuffmanTree": HuffmanTreeModel(),
         }
         
@@ -49,6 +51,7 @@ class MainController(QObject):
             "Stack": StackAdapter(),
             "BinaryTree": BinaryTreeAdapter(),
             "BST": BSTAdapter(),
+            "AVL": AVLAdapter(),
             "HuffmanTree": HuffmanTreeAdapter(),
         }
         
@@ -493,6 +496,86 @@ class MainController(QObject):
             # 最终更新显示
             self._update_snapshot()
             self._animation_timer.deleteLater()
+    
+    def _update_avl_animation(self, structure):
+        """更新AVL树动画"""
+        import time
+        
+        if self._animation_start_time == 0:
+            self._animation_start_time = time.time() * 1000  # 转换为毫秒
+        
+        current_time = time.time() * 1000
+        elapsed = current_time - self._animation_start_time
+        
+        # 计算动画进度 (0.0 到 1.0)
+        progress = min(elapsed / self._animation_duration, 1.0)
+        
+        # 根据动画状态选择不同的更新方法
+        if structure._animation_state == 'inserting':
+            structure.update_insert_animation(progress)
+        else:
+            structure.update_animation_progress(progress)
+        
+        # 更新显示
+        self._update_snapshot()
+        
+        # 如果动画完成，停止定时器并完成操作
+        if progress >= 1.0:
+            self._animation_timer.stop()
+            if structure._animation_state == 'creating_root':
+                # 创建根节点
+                structure.root = structure.Node(structure._new_value)
+                structure._animation_state = None
+                structure._animation_progress = 0.0
+                structure._new_value = None
+            elif structure._animation_state == 'inserting':
+                # 执行实际的插入操作（包含自动平衡）
+                structure.root = structure._insert_recursive(structure.root, structure._new_value)
+                
+                structure._animation_state = None
+                structure._animation_progress = 0.0
+                structure._new_value = None
+                structure._insert_path = []
+                structure._current_insert_step = 0
+                structure._insert_comparison_result = None
+            
+            # 最终更新显示
+            self._update_snapshot()
+            self._animation_timer.deleteLater()
+    
+    def insert_avl(self, value):
+        """插入节点到AVL树"""
+        try:
+            structure = self._get_current_structure()
+            if structure and hasattr(structure, 'insert'):
+                # 开始插入动画
+                structure.insert(value)
+                self._update_snapshot()
+                
+                # 使用定时器实现平滑动画
+                from PyQt5.QtCore import QTimer
+                
+                # 创建动画定时器
+                self._animation_timer = QTimer()
+                self._animation_timer.timeout.connect(lambda: self._update_avl_animation(structure))
+                self._animation_timer.start(50)  # 每50ms更新一次，实现平滑效果
+                
+                # 设置动画总时长
+                self._animation_duration = 2000  # 2秒总时长（AVL需要更多时间显示平衡过程）
+                self._animation_start_time = 0
+                
+        except Exception as e:
+            self._show_error("插入失败", str(e))
+    
+    def clear_avl(self):
+        """清空AVL树"""
+        try:
+            structure = self._get_current_structure()
+            if structure and hasattr(structure, 'clear'):
+                structure.clear()
+                self._update_snapshot()
+        except Exception as e:
+            self._show_error("清空失败", str(e))
     
     def pop_stack(self):
         """出栈"""
