@@ -83,17 +83,15 @@ class DSLExecutor:
             elif command.type == CommandType.CREATE_BINARYTREE:
                 # 层序构建二叉树
                 values = command.args['values']
-                # 这里需要实现层序构建逻辑
-                # 暂时先逐节点插入
-                for val in values:
-                    # 首次插入作为根节点
-                    if self.controller.structures['BinaryTree'].root is None:
-                        self.controller.insert_binary_tree_node(val)
-                    else:
-                        # 后续节点需要用户选择父节点,这里简化处理
-                        # 实际应该实现自动层序插入逻辑
-                        break
+                self.controller.build_binary_tree(values)
                 return True, f"已构建二叉树(层序): {','.join(values)}"
+            
+            elif command.type == CommandType.INSERT_BINARYTREE:
+                value = command.args['value']
+                position = command.args['position']  # left or right
+                parent_value = command.args['parent_value']
+                self.controller.insert_binary_tree_with_position(value, parent_value, position)
+                return True, f"已在节点 {parent_value} 的{position}侧插入 {value}"
             
             elif command.type == CommandType.CREATE_BST:
                 # BST逐个插入构建

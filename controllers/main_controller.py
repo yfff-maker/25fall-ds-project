@@ -13,6 +13,7 @@ from structures.binary_tree import BinaryTreeModel
 from structures.bst import BSTModel
 from structures.avl import AVLModel
 from structures.huffman import HuffmanTreeModel
+from collections import deque
 from .adapters import (
     SequentialListAdapter, LinkedListAdapter, StackAdapter,
     BinaryTreeAdapter, BSTAdapter, AVLAdapter, HuffmanTreeAdapter,
@@ -685,6 +686,113 @@ class MainController(QObject):
         # 这个方法需要与UI层交互，暂时抛出信号
         self.parent_selection_requested.emit(value)
     
+    def build_binary_tree(self, values):
+        """层序构建二叉树（批量插入）"""
+        try:
+            structure = self.structures.get("BinaryTree")
+            if not structure:
+                return
+            
+            # 如果tree为空，先创建根节点
+            if structure.root is None and values:
+                value = values[0]
+                structure.root = BinaryTreeModel.Node(value)
+                self._update_snapshot()
+                
+                # 如果只有一个值，直接返回
+                if len(values) == 1:
+                    return
+                
+                # 从第二个值开始插入
+                remaining_values = values[1:]
+            else:
+                remaining_values = values
+            
+            # 使用队列进行层序插入
+            for value in remaining_values:
+                # 每次都重新构建队列，从根开始查找
+                queue = deque([structure.root])
+                found_parent = None
+                
+                while queue:
+                    parent = queue.popleft()
+                    
+                    # 左子节点为空
+                    if parent.left is None:
+                        parent.left = BinaryTreeModel.Node(value)
+                        found_parent = parent
+                        break
+                    
+                    # 右子节点为空
+                    elif parent.right is None:
+                        parent.right = BinaryTreeModel.Node(value)
+                        found_parent = parent
+                        break
+                    
+                    # 如果左右都不为空，加入队列继续查找
+                    queue.append(parent.left)
+                    queue.append(parent.right)
+                
+                # 如果没找到合适的父节点，说明树已经满了或异常
+                if not found_parent:
+                    self._show_error("构建失败", f"无法为值 {value} 找到合适的插入位置")
+                    break
+            
+            self._update_snapshot()
+            
+        except Exception as e:
+            self._show_error("构建失败", str(e))
+    
+    def insert_binary_tree_with_position(self, value: str, parent_value: str, position: str):
+        """插入二叉树节点（指定位置）"""
+        try:
+            if not value:
+                self._show_warning("请输入一个值")
+                return
+            
+            structure = self.structures.get("BinaryTree")
+            if not structure:
+                self._show_error("插入失败", "二叉树结构不存在")
+                return
+            
+            # 验证position参数
+            if position.lower() not in ['left', 'right']:
+                self._show_error("插入失败", f"无效的位置参数: {position}，只接受 'left' 或 'right'")
+                return
+            
+            # 查找父节点
+            parent_node = structure.find_node_by_value(parent_value)
+            if not parent_node:
+                self._show_error("插入失败", f"未找到父节点: {parent_value}")
+                return
+            
+            # 检查指定位置是否已有子节点
+            position = position.lower()
+            if position == 'left' and parent_node.left is not None:
+                self._show_error("插入失败", f"节点 {parent_value} 的左子节点已存在")
+                return
+            if position == 'right' and parent_node.right is not None:
+                self._show_error("插入失败", f"节点 {parent_value} 的右子节点已存在")
+                return
+            
+            # 开始插入动画
+            structure.start_insert_animation(value, parent_value, position)
+            
+            # 使用定时器实现平滑动画
+            from PyQt5.QtCore import QTimer
+            self._animation_timer = QTimer()
+            self._animation_timer.timeout.connect(lambda: self._update_binary_tree_animation(structure))
+            self._animation_timer.start(50)  # 每50ms更新一次
+            
+            # 设置动画总时长
+            self._animation_duration = 1000  # 1秒总时长
+            self._animation_start_time = 0
+            
+            self._update_snapshot()
+            
+        except Exception as e:
+            self._show_error("插入失败", str(e))
+    
     # ========== BST操作 ==========
     
     def insert_bst(self, value: str):
@@ -1099,10 +1207,10 @@ class MainController(QObject):
         # 如果动画完成，停止定时器并完成操作
         if progress >= 1.0:
             self._animation_timer.stop()
-            structure._animation_state = None
-            structure._animation_progress = 0.0
-            structure._new_value = None
-            structure._rotation_plan = None
+            
+            # 执行实际的插入操作
+            structure.complete_insert_animation()
+            
             self._update_snapshot()
             self._animation_timer.deleteLater()
     

@@ -3082,8 +3082,8 @@ class AVLAdapter:
                 value=bf_text,
                 x=current_x + 50,  # 节点右侧
                 y=current_y - 10,  # 节点上方
-                width=80,
-                height=20,
+                width=120,  # 增加宽度以完整显示文字
+                height=25,  # 增加高度以适应文字
                 color="#8B4513" if abs(balance_factor) <= 1 else "#FF6B6B",  # 褐色正常，红色失衡
                 text_color="#FFFFFF"
             )

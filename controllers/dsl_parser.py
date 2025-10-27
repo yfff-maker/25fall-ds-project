@@ -28,6 +28,7 @@ class CommandType(Enum):
     
     # 二叉树操作
     CREATE_BINARYTREE = "create_binarytree"
+    INSERT_BINARYTREE = "insert_binarytree"
     
     # BST操作
     CREATE_BST = "create_bst"
@@ -106,6 +107,10 @@ class DSLParser:
         # 二叉树
         CommandType.CREATE_BINARYTREE: re.compile(
             r'create\s+binarytree\s+with\s+(.+)$',
+            re.IGNORECASE
+        ),
+        CommandType.INSERT_BINARYTREE: re.compile(
+            r'insert\s+(\w+)\s+as\s+(left|right)\s+of\s+(\w+)\s+in\s+binarytree$',
             re.IGNORECASE
         ),
         
@@ -247,6 +252,12 @@ class DSLParser:
             values_str = match.group(1).strip()
             args['values'] = [v.strip() for v in values_str.split(',')]
             
+        elif cmd_type == CommandType.INSERT_BINARYTREE:
+            # insert 6 as left of 3 in binarytree
+            args['value'] = match.group(1).strip()
+            args['position'] = match.group(2).lower().strip()  # left or right
+            args['parent_value'] = match.group(3).strip()
+            
         elif cmd_type == CommandType.CREATE_BST:
             # create bst with 50,30,70,20,40,60,80
             values_str = match.group(1).strip()
@@ -300,6 +311,7 @@ class DSLParser:
             CommandType.POP_STACK: "Stack",
             
             CommandType.CREATE_BINARYTREE: "BinaryTree",
+            CommandType.INSERT_BINARYTREE: "BinaryTree",
             
             CommandType.CREATE_BST: "BST",
             CommandType.INSERT_BST: "BST",

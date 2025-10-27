@@ -44,9 +44,11 @@ push 200 to stack
 pop from stack
 ```
 
-### 二叉树操作(层序构建)
+### 二叉树操作(层序构建和单个插入)
 ```
-create binarytree with 1,2,3,4,5
+create binarytree with 1,2,3,4,5,6,7  # 层序构建完整树
+insert 8 as left of 4 in binarytree      # 在指定位置插入
+insert 9 as right of 4 in binarytree
 ```
 
 ### 二叉搜索树操作
