@@ -2,7 +2,7 @@
 """
 主控制器：协调Model、View和用户交互
 """
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List, Tuple
 from PyQt5.QtWidgets import QMessageBox, QDialog
 from PyQt5.QtCore import QObject, pyqtSignal
 
@@ -18,6 +18,8 @@ from .adapters import (
     BinaryTreeAdapter, BSTAdapter, AVLAdapter, HuffmanTreeAdapter,
     StructureSnapshot
 )
+from .dsl_parser import DSLParser
+from .dsl_executor import DSLExecutor
 
 class MainController(QObject):
     """主控制器类"""
@@ -59,6 +61,11 @@ class MainController(QObject):
         self._huffman_animation_paused = False  # 哈夫曼树动画暂停状态
         self._huffman_animation_paused_time = 0  # 暂停时的时间
         self._huffman_animation_pause_offset = 0  # 暂停时间偏移
+        
+        # 初始化DSL解析器和执行器
+        self.dsl_parser = DSLParser()
+        self.dsl_executor = DSLExecutor(self)
+        
         self._update_snapshot()
     
     # ====== 序列化：保存/加载 ======
@@ -496,86 +503,6 @@ class MainController(QObject):
             # 最终更新显示
             self._update_snapshot()
             self._animation_timer.deleteLater()
-    
-    def _update_avl_animation(self, structure):
-        """更新AVL树动画"""
-        import time
-        
-        if self._animation_start_time == 0:
-            self._animation_start_time = time.time() * 1000  # 转换为毫秒
-        
-        current_time = time.time() * 1000
-        elapsed = current_time - self._animation_start_time
-        
-        # 计算动画进度 (0.0 到 1.0)
-        progress = min(elapsed / self._animation_duration, 1.0)
-        
-        # 根据动画状态选择不同的更新方法
-        if structure._animation_state == 'inserting':
-            structure.update_insert_animation(progress)
-        else:
-            structure.update_animation_progress(progress)
-        
-        # 更新显示
-        self._update_snapshot()
-        
-        # 如果动画完成，停止定时器并完成操作
-        if progress >= 1.0:
-            self._animation_timer.stop()
-            if structure._animation_state == 'creating_root':
-                # 创建根节点
-                structure.root = structure.Node(structure._new_value)
-                structure._animation_state = None
-                structure._animation_progress = 0.0
-                structure._new_value = None
-            elif structure._animation_state == 'inserting':
-                # 执行实际的插入操作（包含自动平衡）
-                structure.root = structure._insert_recursive(structure.root, structure._new_value)
-                
-                structure._animation_state = None
-                structure._animation_progress = 0.0
-                structure._new_value = None
-                structure._insert_path = []
-                structure._current_insert_step = 0
-                structure._insert_comparison_result = None
-            
-            # 最终更新显示
-            self._update_snapshot()
-            self._animation_timer.deleteLater()
-    
-    def insert_avl(self, value):
-        """插入节点到AVL树"""
-        try:
-            structure = self._get_current_structure()
-            if structure and hasattr(structure, 'insert'):
-                # 开始插入动画
-                structure.insert(value)
-                self._update_snapshot()
-                
-                # 使用定时器实现平滑动画
-                from PyQt5.QtCore import QTimer
-                
-                # 创建动画定时器
-                self._animation_timer = QTimer()
-                self._animation_timer.timeout.connect(lambda: self._update_avl_animation(structure))
-                self._animation_timer.start(50)  # 每50ms更新一次，实现平滑效果
-                
-                # 设置动画总时长
-                self._animation_duration = 2000  # 2秒总时长（AVL需要更多时间显示平衡过程）
-                self._animation_start_time = 0
-                
-        except Exception as e:
-            self._show_error("插入失败", str(e))
-    
-    def clear_avl(self):
-        """清空AVL树"""
-        try:
-            structure = self._get_current_structure()
-            if structure and hasattr(structure, 'clear'):
-                structure.clear()
-                self._update_snapshot()
-        except Exception as e:
-            self._show_error("清空失败", str(e))
     
     def pop_stack(self):
         """出栈"""
@@ -1087,3 +1014,108 @@ class MainController(QObject):
     
     # 信号定义（用于UI交互）
     parent_selection_requested = pyqtSignal(str)  # 请求父节点选择
+    
+    # ========== DSL功能 ==========
+    
+    def execute_dsl_command(self, command_text: str) -> Tuple[bool, str]:
+        """
+        执行单条DSL命令
+        
+        Args:
+            command_text: DSL命令文本
+            
+        Returns:
+            (成功标志, 消息文本)
+        """
+        try:
+            command = self.dsl_parser.parse(command_text)
+            if command.type.value == "unknown":
+                return True, "跳过注释或空行"  # 注释和空行视为成功
+            return self.dsl_executor.execute(command)
+        except Exception as e:
+            return False, str(e)
+    
+    def execute_dsl_script(self, script_text: str) -> Tuple[int, int, List[str]]:
+        """
+        执行DSL脚本(批量命令)
+        
+        Args:
+            script_text: 脚本文本(每行一条命令)
+            
+        Returns:
+            (成功数, 失败数, 详细消息列表)
+        """
+        try:
+            commands = self.dsl_parser.parse_script(script_text)
+            return self.dsl_executor.execute_script(commands)
+        except Exception as e:
+            return 0, 1, [f"脚本解析失败: {str(e)}"]
+    
+    # ========== AVL树操作 ==========
+    
+    def insert_avl(self, value: str):
+        """插入AVL树节点"""
+        try:
+            if not value:
+                self._show_warning("请输入一个值")
+                return
+            
+            structure = self.structures.get("AVL")
+            if structure:
+                # 开始插入动画
+                structure.insert(value)
+                
+                # 使用定时器实现平滑动画
+                from PyQt5.QtCore import QTimer
+                self._animation_timer = QTimer()
+                self._animation_timer.timeout.connect(lambda: self._update_avl_animation(structure))
+                self._animation_timer.start(100)  # 每100ms更新一次
+                
+                # 设置动画总时长
+                self._animation_duration = 2000  # 2秒总时长
+                self._animation_start_time = 0
+                
+                self._update_snapshot()
+        except Exception as e:
+            self._show_error("插入失败", str(e))
+    
+    def _update_avl_animation(self, structure):
+        """更新AVL树动画"""
+        import time
+        
+        if self._animation_start_time == 0:
+            self._animation_start_time = time.time() * 1000  # 转换为毫秒
+        
+        current_time = time.time() * 1000
+        elapsed = current_time - self._animation_start_time
+        
+        # 计算动画进度 (0.0 到 1.0)
+        progress = min(elapsed / self._animation_duration, 1.0)
+        structure.update_animation_progress(progress)
+        
+        # 更新显示
+        self._update_snapshot()
+        
+        # 如果动画完成，停止定时器并完成操作
+        if progress >= 1.0:
+            self._animation_timer.stop()
+            structure._animation_state = None
+            structure._animation_progress = 0.0
+            structure._new_value = None
+            structure._rotation_plan = None
+            self._update_snapshot()
+            self._animation_timer.deleteLater()
+    
+    def clear_avl(self):
+        """清空AVL树"""
+        try:
+            structure = self.structures.get("AVL")
+            if structure:
+                structure.root = None
+                structure._animation_state = None
+                structure._animation_progress = 0.0
+                structure._new_value = None
+                structure._rotation_plan = None
+                self._update_snapshot()
+        except Exception as e:
+            self._show_error("清空失败", str(e))

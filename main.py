@@ -3,7 +3,7 @@ import sys
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QGroupBox,
     QPushButton, QLabel, QLineEdit, QDockWidget, QFrame, QMessageBox,
-    QHBoxLayout, QSpinBox, QDialog, QComboBox, QFileDialog, QAction
+    QHBoxLayout, QSpinBox, QDialog, QComboBox, QFileDialog, QAction, QTextEdit
 )
 from PyQt5.QtCore import Qt, pyqtSlot
 from canvas import Canvas
@@ -102,6 +102,44 @@ class MainWindow(QMainWindow):
 
     '''左侧分组按钮（顺序表/链表/栈/树/BST/哈夫曼）及其点击事件绑定到 select_structure(...)'''
     def _build_left_panel(self):
+    # —— DSL命令 —— #
+        group_dsl = QGroupBox("DSL命令")
+        gdsl = QVBoxLayout(group_dsl)
+        
+        # DSL命令输入框(多行)
+        self.dsl_text_edit = QTextEdit()
+        self.dsl_text_edit.setPlaceholderText(
+            "# DSL命令示例:\n"
+            "# create arraylist with 1,2,3\n"
+            "# insert 4 at 1 in arraylist\n"
+            "# push 100 to stack\n"
+            "# create bst with 50,30,70\n"
+        )
+        self.dsl_text_edit.setMaximumHeight(150)  # 限制高度
+        gdsl.addWidget(self.dsl_text_edit)
+        
+        # DSL操作按钮
+        dsl_btn_layout = QHBoxLayout()
+        btn_execute_dsl = QPushButton("执行")
+        btn_execute_dsl.clicked.connect(self._handle_execute_dsl)
+        btn_clear_dsl = QPushButton("清空")
+        btn_clear_dsl.clicked.connect(self._handle_clear_dsl)
+        btn_load_dsl = QPushButton("从文件导入")
+        btn_load_dsl.clicked.connect(self._handle_load_dsl_file)
+        
+        dsl_btn_layout.addWidget(btn_execute_dsl)
+        dsl_btn_layout.addWidget(btn_clear_dsl)
+        dsl_btn_layout.addWidget(btn_load_dsl)
+        gdsl.addLayout(dsl_btn_layout)
+        
+        # 添加DSL结果标签
+        self.dsl_result_label = QLabel("")
+        self.dsl_result_label.setWordWrap(True)
+        self.dsl_result_label.setMaximumHeight(60)
+        gdsl.addWidget(self.dsl_result_label)
+        
+        self.left_layout.addWidget(group_dsl)
+    
     # —— 线性表 —— #
         group_list = QGroupBox("线性表")
         gl = QVBoxLayout(group_list)
@@ -486,6 +524,56 @@ class MainWindow(QMainWindow):
         else:
             # 其他数据结构的动画控制
             self.canvas.animator_step()
+    
+    def _handle_execute_dsl(self):
+        """执行DSL命令"""
+        script_text = self.dsl_text_edit.toPlainText().strip()
+        if not script_text:
+            QMessageBox.warning(self, "提示", "请输入DSL命令")
+            return
+        
+        try:
+            # 批量执行DSL脚本
+            success_count, fail_count, messages = self.controller.execute_dsl_script(script_text)
+            
+            # 显示执行结果
+            result_msg = f"成功: {success_count}条, 失败: {fail_count}条"
+            self.dsl_result_label.setText(result_msg)
+            
+            # 如果有失败的命令,显示详细消息
+            if fail_count > 0:
+                error_details = "\n".join([msg for msg in messages if msg.startswith("✗")])
+                QMessageBox.warning(self, "执行结果", f"{result_msg}\n\n失败的命令:\n{error_details}")
+            else:
+                QMessageBox.information(self, "执行成功", result_msg)
+                
+        except Exception as e:
+            QMessageBox.critical(self, "执行失败", f"DSL执行出错: {str(e)}")
+            self.dsl_result_label.setText(f"错误: {str(e)}")
+    
+    def _handle_clear_dsl(self):
+        """清空DSL命令输入框"""
+        self.dsl_text_edit.clear()
+        self.dsl_result_label.clear()
+    
+    def _handle_load_dsl_file(self):
+        """从文件加载DSL脚本"""
+        path, _ = QFileDialog.getOpenFileName(
+            self, 
+            "打开DSL脚本", 
+            "", 
+            "DSL Script (*.dsl);;Text Files (*.txt);;All Files (*)"
+        )
+        if not path:
+            return
+        
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            self.dsl_text_edit.setPlainText(content)
+            self.dsl_result_label.setText(f"已加载: {path}")
+        except Exception as e:
+            QMessageBox.critical(self, "加载失败", f"无法读取文件: {str(e)}")
 
 def main():
     app = QApplication(sys.argv)
