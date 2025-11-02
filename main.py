@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+import os
+
+os.environ["HTTP_PROXY"] = "http://127.0.0.1:7890"
+os.environ["HTTPS_PROXY"] = "http://127.0.0.1:7890"
 import sys
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QGroupBox,
@@ -211,6 +215,14 @@ class MainWindow(QMainWindow):
         act_save_as.setShortcut("Ctrl+Shift+S")
         act_save_as.triggered.connect(self._action_save_as)
         file_menu.addAction(act_save_as)
+        
+        # AI助手菜单
+        ai_menu = menubar.addMenu("AI助手")
+        
+        act_nl_command = QAction("自然语言操作", self)
+        act_nl_command.setShortcut("Ctrl+L")
+        act_nl_command.triggered.connect(self._action_natural_language)
+        ai_menu.addAction(act_nl_command)
 
     def _action_open(self):
         path, _ = QFileDialog.getOpenFileName(self, "打开工程", "", "Data Structure Vis (*.dsv);;JSON (*.json);;All Files (*)")
@@ -574,6 +586,88 @@ class MainWindow(QMainWindow):
             self.dsl_result_label.setText(f"已加载: {path}")
         except Exception as e:
             QMessageBox.critical(self, "加载失败", f"无法读取文件: {str(e)}")
+    
+    def _action_natural_language(self):
+        """打开自然语言操作对话框"""
+        dialog = NaturalLanguageDialog(self)
+        if dialog.exec_() == QDialog.Accepted:
+            user_input = dialog.get_input()
+            if user_input:
+                self._execute_natural_language(user_input)
+    
+    def _execute_natural_language(self, user_input: str):
+        """执行自然语言命令"""
+        try:
+            # 显示加载提示
+            from PyQt5.QtWidgets import QMessageBox
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("处理中")
+            msg_box.setText("正在调用LLM处理自然语言...")
+            msg_box.setStandardButtons(QMessageBox.NoButton)
+            msg_box.show()
+            
+            # 执行命令（异步，但先简单实现）
+            success, message, action = self.controller.execute_natural_language_command(user_input)
+            
+            msg_box.close()
+            
+            if success:
+                # 显示转换后的JSON动作
+                import json
+                action_json = json.dumps(action, ensure_ascii=False, indent=2) if action else "无"
+                QMessageBox.information(
+                    self, 
+                    "执行成功", 
+                    f"{message}\n\n转换后的动作：\n{action_json}"
+                )
+            else:
+                QMessageBox.warning(
+                    self, 
+                    "执行失败", 
+                    f"{message}\n\n提示：您可以尝试在DSL输入框中手动输入DSL命令。"
+                )
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"执行自然语言命令时出错: {str(e)}")
+
+
+'''自然语言输入对话框'''
+class NaturalLanguageDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("自然语言操作")
+        self.setModal(True)
+        self.resize(500, 300)
+        
+        layout = QVBoxLayout()
+        
+        # 说明标签
+        label = QLabel("请输入自然语言描述，系统将自动转换为操作指令：\n例如：创建一个包含数据元素[5,3,7,2,4]的二叉搜索树")
+        label.setWordWrap(True)
+        layout.addWidget(label)
+        
+        # 输入框
+        self.input_text = QTextEdit()
+        self.input_text.setPlaceholderText("输入自然语言描述...")
+        self.input_text.setMaximumHeight(150)
+        layout.addWidget(self.input_text)
+        
+        # 按钮
+        button_layout = QHBoxLayout()
+        ok_button = QPushButton("执行")
+        cancel_button = QPushButton("取消")
+        
+        ok_button.clicked.connect(self.accept)
+        cancel_button.clicked.connect(self.reject)
+        
+        button_layout.addWidget(ok_button)
+        button_layout.addWidget(cancel_button)
+        layout.addLayout(button_layout)
+        
+        self.setLayout(layout)
+    
+    def get_input(self):
+        """获取用户输入"""
+        return self.input_text.toPlainText().strip()
 
 def main():
     app = QApplication(sys.argv)

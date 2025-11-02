@@ -21,6 +21,8 @@ from .adapters import (
 )
 from .dsl_parser import DSLParser
 from .dsl_executor import DSLExecutor
+from .llm_service import LLMService
+from .action_executor import ActionExecutor
 
 class MainController(QObject):
     """主控制器类"""
@@ -66,6 +68,10 @@ class MainController(QObject):
         # 初始化DSL解析器和执行器
         self.dsl_parser = DSLParser()
         self.dsl_executor = DSLExecutor(self)
+        
+        # 初始化LLM服务和动作执行器
+        self.llm_service = LLMService()
+        self.action_executor = ActionExecutor(self)
         
         self._update_snapshot()
     
@@ -1227,3 +1233,37 @@ class MainController(QObject):
                 self._update_snapshot()
         except Exception as e:
             self._show_error("清空失败", str(e))
+    
+    # ========== 自然语言处理功能 ==========
+    
+    def execute_natural_language_command(self, user_input: str) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+        """
+        执行自然语言命令
+        
+        Args:
+            user_input: 用户的自然语言输入
+            
+        Returns:
+            (成功标志, 消息文本, 转换后的动作JSON)
+        """
+        try:
+            # 检查API密钥
+            if not self.llm_service.check_api_key():
+                return False, "未设置OPENROUTER_API_KEY环境变量，请在系统环境变量中设置", None
+            
+            # 转换为JSON动作
+            action = self.llm_service.convert_natural_language_to_action(user_input)
+            
+            if action is None:
+                return False, "LLM转换失败，请检查输入是否明确，或尝试手动输入DSL命令", None
+            
+            # 执行动作
+            success, message = self.action_executor.execute_action(action)
+            
+            return success, message, action
+            
+        except ValueError as e:
+            # API密钥未设置
+            return False, str(e), None
+        except Exception as e:
+            return False, f"执行自然语言命令失败: {str(e)}", None
