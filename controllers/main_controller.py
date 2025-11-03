@@ -799,6 +799,35 @@ class MainController(QObject):
         except Exception as e:
             self._show_error("插入失败", str(e))
     
+    def delete_binary_tree(self, value: str):
+        """删除二叉树节点及其子树"""
+        try:
+            if not value:
+                self._show_warning("请输入一个值")
+                return
+            
+            structure = self.structures.get("BinaryTree")
+            if not structure:
+                self._show_error("删除失败", "二叉树结构不存在")
+                return
+            
+            # 检查节点是否存在
+            target_node = structure.find_node_by_value(value)
+            if not target_node:
+                self._show_error("删除失败", f"未找到节点: {value}")
+                return
+            
+            # 执行删除
+            success = structure.delete_node(value)
+            if success:
+                self._update_snapshot()
+                self.hint_updated.emit(f"已删除节点: {value} 及其子树")
+            else:
+                self._show_error("删除失败", "删除操作失败")
+                
+        except Exception as e:
+            self._show_error("删除失败", str(e))
+    
     # ========== BST操作 ==========
     
     def insert_bst(self, value: str):

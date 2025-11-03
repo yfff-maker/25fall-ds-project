@@ -66,6 +66,61 @@ class BinaryTreeModel(BaseStructure):
             return left_result
         
         return self._find_node(node.right, value)
+    
+    def find_parent_node(self, target_value):
+        """查找目标节点的父节点"""
+        if not self.root:
+            return None
+        if str(self.root.value) == str(target_value):
+            return None  # 根节点没有父节点
+        
+        return self._find_parent(self.root, target_value)
+    
+    def _find_parent(self, node, target_value):
+        """递归查找父节点"""
+        if not node:
+            return None
+        
+        # 检查左子节点
+        if node.left and str(node.left.value) == str(target_value):
+            return node, 'left'
+        
+        # 检查右子节点
+        if node.right and str(node.right.value) == str(target_value):
+            return node, 'right'
+        
+        # 递归查找左子树
+        left_result = self._find_parent(node.left, target_value)
+        if left_result:
+            return left_result
+        
+        # 递归查找右子树
+        return self._find_parent(node.right, target_value)
+    
+    def delete_node(self, value):
+        """删除节点及其所有子树"""
+        if not self.active or value is None:
+            return False
+        
+        # 如果要删除的是根节点
+        if self.root and str(self.root.value) == str(value):
+            self.root = None
+            return True
+        
+        # 查找父节点
+        parent_info = self.find_parent_node(value)
+        if not parent_info:
+            return False  # 节点不存在
+        
+        parent_node, position = parent_info
+        
+        # 删除节点
+        if position == 'left':
+            parent_node.left = None
+        else:  # position == 'right'
+            parent_node.right = None
+        
+        return True
 
     def insert_node(self, value, parent_value):
         """插入新节点到指定父节点"""

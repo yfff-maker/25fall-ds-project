@@ -86,12 +86,23 @@ class DSLExecutor:
                 self.controller.build_binary_tree(values)
                 return True, f"已构建二叉树(层序): {','.join(values)}"
             
+            elif command.type == CommandType.BUILD_BINARYTREE:
+                # 层序构建二叉树
+                values = command.args['values']
+                self.controller.build_binary_tree(values)
+                return True, f"已构建二叉树(层序): {','.join(values)}"
+            
             elif command.type == CommandType.INSERT_BINARYTREE:
                 value = command.args['value']
                 position = command.args['position']  # left or right
                 parent_value = command.args['parent_value']
                 self.controller.insert_binary_tree_with_position(value, parent_value, position)
                 return True, f"已在节点 {parent_value} 的{position}侧插入 {value}"
+            
+            elif command.type == CommandType.DELETE_BINARYTREE:
+                value = command.args['value']
+                self.controller.delete_binary_tree(value)
+                return True, f"已删除节点: {value} 及其子树"
             
             elif command.type == CommandType.CREATE_BST:
                 # BST逐个插入构建

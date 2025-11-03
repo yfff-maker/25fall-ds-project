@@ -405,13 +405,28 @@ class MainWindow(QMainWindow):
             lay.addWidget(input_line)
             b1 = QPushButton("插入节点")
             b1.clicked.connect(lambda: self._insert_binary_tree_node(get_value()))
+            lay.addWidget(b1)
+            
+            # 批量构建功能
+            build_line = QLineEdit()
+            build_line.setPlaceholderText("批量构建：如 1,2,3,4,5")
+            lay.addWidget(build_line)
+            btn_build = QPushButton("批量构建")
+            btn_build.clicked.connect(lambda: self._build_binary_tree(build_line.text().strip()))
+            lay.addWidget(btn_build)
+            
             b2 = QPushButton("前序遍历")
             b2.clicked.connect(lambda: self.controller.traverse_binary_tree("pre"))
             b3 = QPushButton("中序遍历")
             b3.clicked.connect(lambda: self.controller.traverse_binary_tree("in"))
             b4 = QPushButton("后序遍历")
             b4.clicked.connect(lambda: self.controller.traverse_binary_tree("post"))
-            for b in (b1,b2,b3,b4): lay.addWidget(b)
+            for b in (b2,b3,b4): lay.addWidget(b)
+            
+            # 删除功能
+            b5 = QPushButton("删除节点")
+            b5.clicked.connect(lambda: self._delete_binary_tree_node(get_value()))
+            lay.addWidget(b5)
 
         elif key == "BST":
             # 插入功能
@@ -478,6 +493,23 @@ class MainWindow(QMainWindow):
         self.controller.select_structure(key)
         self._make_dynamic_panel_for(key)
 
+    def _build_binary_tree(self, values_text: str):
+        """批量构建二叉树"""
+        try:
+            if not values_text:
+                QMessageBox.warning(self, "提示", "请输入要构建的节点值")
+                return
+            
+            values = [v.strip() for v in values_text.split(',') if v.strip()]
+            if not values:
+                QMessageBox.warning(self, "提示", "请输入有效的节点值")
+                return
+            
+            self.controller.build_binary_tree(values)
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"批量构建失败：{str(e)}")
+            print(f"Error in _build_binary_tree: {e}")
+    
     def _insert_binary_tree_node(self, value):
         """处理二叉树节点插入"""
         try:
@@ -512,6 +544,40 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "错误", f"插入节点时发生错误：{str(e)}")
             print(f"Error in _insert_binary_tree_node: {e}")
+    
+    def _delete_binary_tree_node(self, value):
+        """处理二叉树节点删除"""
+        try:
+            if not value:
+                QMessageBox.warning(self, "提示", "请输入要删除的节点值")
+                return
+            
+            # 获取当前数据结构
+            structure = self.controller.structures.get("BinaryTree")
+            if not structure:
+                QMessageBox.warning(self, "错误", "二叉树结构不存在")
+                return
+            
+            # 检查节点是否存在
+            target_node = structure.find_node_by_value(value)
+            if not target_node:
+                QMessageBox.warning(self, "错误", f"未找到节点: {value}")
+                return
+            
+            # 确认删除（因为会删除整个子树）
+            reply = QMessageBox.question(
+                self, 
+                "确认删除", 
+                f"确定要删除节点 {value} 及其所有子树吗？\n此操作不可撤销。",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+            
+            if reply == QMessageBox.Yes:
+                self.controller.delete_binary_tree(value)
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"删除节点时发生错误：{str(e)}")
+            print(f"Error in _delete_binary_tree_node: {e}")
 
     def _handle_parent_selection_request(self, value):
         """处理父节点选择请求"""

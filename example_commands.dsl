@@ -27,9 +27,11 @@ pop from stack
 # ========================
 # 二叉树操作(层序构建和单个插入)
 # ========================
-create binarytree with 1,2,3,4,5,6,7
+
+build binarytree with 10,11,12,13,14,15,16
 insert 8 as left of 4 in binarytree
 insert 9 as right of 4 in binarytree
+delete 4 from binarytree
 
 # ========================
 # 二叉搜索树操作

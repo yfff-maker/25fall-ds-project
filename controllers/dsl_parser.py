@@ -28,7 +28,9 @@ class CommandType(Enum):
     
     # 二叉树操作
     CREATE_BINARYTREE = "create_binarytree"
+    BUILD_BINARYTREE = "build_binarytree"
     INSERT_BINARYTREE = "insert_binarytree"
+    DELETE_BINARYTREE = "delete_binarytree"
     
     # BST操作
     CREATE_BST = "create_bst"
@@ -109,8 +111,16 @@ class DSLParser:
             r'create\s+binarytree\s+with\s+(.+)$',
             re.IGNORECASE
         ),
+        CommandType.BUILD_BINARYTREE: re.compile(
+            r'build\s+binarytree\s+with\s+(.+)$',
+            re.IGNORECASE
+        ),
         CommandType.INSERT_BINARYTREE: re.compile(
             r'insert\s+(\w+)\s+as\s+(left|right)\s+of\s+(\w+)\s+in\s+binarytree$',
+            re.IGNORECASE
+        ),
+        CommandType.DELETE_BINARYTREE: re.compile(
+            r'delete\s+(\w+)\s+from\s+binarytree$',
             re.IGNORECASE
         ),
         
@@ -252,11 +262,20 @@ class DSLParser:
             values_str = match.group(1).strip()
             args['values'] = [v.strip() for v in values_str.split(',')]
             
+        elif cmd_type == CommandType.BUILD_BINARYTREE:
+            # build binarytree with 1,2,3,4,5
+            values_str = match.group(1).strip()
+            args['values'] = [v.strip() for v in values_str.split(',')]
+            
         elif cmd_type == CommandType.INSERT_BINARYTREE:
             # insert 6 as left of 3 in binarytree
             args['value'] = match.group(1).strip()
             args['position'] = match.group(2).lower().strip()  # left or right
             args['parent_value'] = match.group(3).strip()
+            
+        elif cmd_type == CommandType.DELETE_BINARYTREE:
+            # delete 4 from binarytree
+            args['value'] = match.group(1).strip()
             
         elif cmd_type == CommandType.CREATE_BST:
             # create bst with 50,30,70,20,40,60,80
@@ -311,7 +330,9 @@ class DSLParser:
             CommandType.POP_STACK: "Stack",
             
             CommandType.CREATE_BINARYTREE: "BinaryTree",
+            CommandType.BUILD_BINARYTREE: "BinaryTree",
             CommandType.INSERT_BINARYTREE: "BinaryTree",
+            CommandType.DELETE_BINARYTREE: "BinaryTree",
             
             CommandType.CREATE_BST: "BST",
             CommandType.INSERT_BST: "BST",
