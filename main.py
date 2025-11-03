@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import (
     QPushButton, QLabel, QLineEdit, QDockWidget, QFrame, QMessageBox,
     QHBoxLayout, QSpinBox, QDialog, QComboBox, QFileDialog, QAction, QTextEdit
 )
-from PyQt5.QtCore import Qt, pyqtSlot
+from PyQt5.QtCore import Qt, pyqtSlot, QThread, pyqtSignal
 from canvas import Canvas
 from widgets.control_panel import ControlPanel
 from controllers.main_controller import MainController
@@ -57,52 +57,61 @@ class MainWindow(QMainWindow):
     '''view层'''
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("数据结构可视化模拟器")
-        self.resize(1280, 820)
+        try:
+            self.setWindowTitle("数据结构可视化模拟器")
+            self.resize(1280, 820)
 
-        # central canvas
-        self.canvas = Canvas(self) # ← 组合关系：MainWindow 持有 Canvas 实例
-        self.setCentralWidget(self.canvas.view)
+            # central canvas
+            self.canvas = Canvas(self) # ← 组合关系：MainWindow 持有 Canvas 实例
+            self.setCentralWidget(self.canvas.view)
 
-        # status bar
-        self.mode_label = QLabel("准备就绪")
-        self.statusBar().addPermanentWidget(self.mode_label, 1)
+            # status bar
+            self.mode_label = QLabel("准备就绪")
+            self.statusBar().addPermanentWidget(self.mode_label, 1)
 
-        # left dock
-        self.left_dock = QDockWidget("操作", self)
-        self.left_dock.setAllowedAreas(Qt.LeftDockWidgetArea)
-        left_widget = QWidget()
-        self.left_layout = QVBoxLayout(left_widget)
-        self.left_layout.setContentsMargins(8, 8, 8, 8)
-        self._build_left_panel()
-        self.left_dock.setWidget(left_widget)
-        self.addDockWidget(Qt.LeftDockWidgetArea, self.left_dock)
+            # left dock
+            self.left_dock = QDockWidget("操作", self)
+            self.left_dock.setAllowedAreas(Qt.LeftDockWidgetArea)
+            left_widget = QWidget()
+            self.left_layout = QVBoxLayout(left_widget)
+            self.left_layout.setContentsMargins(8, 8, 8, 8)
+            self._build_left_panel()
+            self.left_dock.setWidget(left_widget)
+            self.addDockWidget(Qt.LeftDockWidgetArea, self.left_dock)
 
-        # control panel
-        self.ctrl_panel = ControlPanel()
-        self.addDockWidget(Qt.BottomDockWidgetArea, self.ctrl_panel)
+            # control panel
+            self.ctrl_panel = ControlPanel()
+            self.addDockWidget(Qt.BottomDockWidgetArea, self.ctrl_panel)
 
-        # 初始化控制器
-        '''控制器层'''
-        self.controller = MainController() # ← 组合关系：MainWindow 持有 MainController 实例
-        self.current_file_path = None  # 记住当前文件路径
-        
-        # 连接控制器信号
-        self.controller.snapshot_updated.connect(self.canvas.render_snapshot)
-        self.controller.hint_updated.connect(self.mode_label.setText)
-        self.controller.parent_selection_requested.connect(self._handle_parent_selection_request)
+            # 初始化控制器
+            '''控制器层'''
+            self.controller = MainController() # ← 组合关系：MainWindow 持有 MainController 实例
+            self.current_file_path = None  # 记住当前文件路径
+            
+            # LLM线程管理
+            self._llm_thread = None
+            
+            # 连接控制器信号
+            self.controller.snapshot_updated.connect(self.canvas.render_snapshot)
+            self.controller.hint_updated.connect(self.mode_label.setText)
+            self.controller.parent_selection_requested.connect(self._handle_parent_selection_request)
 
-        # 选择默认数据结构
-        self.select_structure("SequentialList")
+            # 选择默认数据结构
+            self.select_structure("SequentialList")
 
-        # 构建菜单栏
-        self._build_menubar()
+            # 构建菜单栏
+            self._build_menubar()
 
-        # wire control panel
-        self.ctrl_panel.playClicked.connect(self._handle_play_clicked)
-        self.ctrl_panel.pauseClicked.connect(self._handle_pause_clicked)
-        self.ctrl_panel.stepClicked.connect(self._handle_step_clicked)
-        self.ctrl_panel.speedChanged.connect(self.canvas.animator_speed)
+            # wire control panel
+            self.ctrl_panel.playClicked.connect(self._handle_play_clicked)
+            self.ctrl_panel.pauseClicked.connect(self._handle_pause_clicked)
+            self.ctrl_panel.stepClicked.connect(self._handle_step_clicked)
+            self.ctrl_panel.speedChanged.connect(self.canvas.animator_speed)
+        except Exception as e:
+            import traceback
+            error_msg = f"MainWindow初始化失败:\n{str(e)}\n\n详细错误信息:\n{traceback.format_exc()}"
+            print(error_msg, file=sys.stderr)
+            raise
 
     '''左侧分组按钮（顺序表/链表/栈/树/BST/哈夫曼）及其点击事件绑定到 select_structure(...)'''
     def _build_left_panel(self):
@@ -596,38 +605,106 @@ class MainWindow(QMainWindow):
                 self._execute_natural_language(user_input)
     
     def _execute_natural_language(self, user_input: str):
-        """执行自然语言命令"""
-        try:
-            # 显示加载提示
-            from PyQt5.QtWidgets import QMessageBox
-            msg_box = QMessageBox(self)
-            msg_box.setWindowTitle("处理中")
-            msg_box.setText("正在调用LLM处理自然语言...")
-            msg_box.setStandardButtons(QMessageBox.NoButton)
-            msg_box.show()
-            
-            # 执行命令（异步，但先简单实现）
-            success, message, action = self.controller.execute_natural_language_command(user_input)
-            
+        """执行自然语言命令（异步执行）"""
+        # 如果已有线程在运行，先停止
+        if self._llm_thread and self._llm_thread.isRunning():
+            self._llm_thread.terminate()
+            self._llm_thread.wait()
+        
+        # 显示加载提示（带取消按钮）
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("处理中")
+        msg_box.setText("正在调用LLM处理自然语言...\n请稍候，这可能需要几秒钟。")
+        msg_box.setStandardButtons(QMessageBox.Cancel)
+        msg_box.setDefaultButton(QMessageBox.Cancel)
+        cancel_button = msg_box.button(QMessageBox.Cancel)
+        cancel_button.setText("取消")
+        
+        # 创建并启动工作线程
+        self._llm_thread = LLMWorkerThread(self.controller, user_input, self)
+        self._llm_thread.finished.connect(
+            lambda success, message, action: self._on_llm_finished(success, message, action, msg_box)
+        )
+        self._llm_thread.error.connect(
+            lambda error_msg: self._on_llm_error(error_msg, msg_box)
+        )
+        
+        # 连接取消按钮
+        def on_cancel():
+            if self._llm_thread and self._llm_thread.isRunning():
+                self._llm_thread.terminate()
+                self._llm_thread.wait()
             msg_box.close()
-            
-            if success:
-                # 显示转换后的JSON动作
-                import json
-                action_json = json.dumps(action, ensure_ascii=False, indent=2) if action else "无"
-                QMessageBox.information(
-                    self, 
-                    "执行成功", 
-                    f"{message}\n\n转换后的动作：\n{action_json}"
-                )
-            else:
-                QMessageBox.warning(
-                    self, 
-                    "执行失败", 
-                    f"{message}\n\n提示：您可以尝试在DSL输入框中手动输入DSL命令。"
-                )
+        
+        cancel_button.clicked.connect(on_cancel)
+        
+        # 启动线程
+        self._llm_thread.start()
+        
+        # 显示对话框（非阻塞，线程完成后会自动关闭）
+        msg_box.show()
+        msg_box.raise_()
+        msg_box.activateWindow()
+    
+    def _on_llm_finished(self, success: bool, message: str, action, msg_box: QMessageBox):
+        """处理LLM调用完成"""
+        # 关闭加载提示
+        if msg_box:
+            msg_box.accept()  # 使用accept()确保对话框正确关闭
+        
+        # 清理线程
+        if self._llm_thread:
+            self._llm_thread.deleteLater()
+            self._llm_thread = None
+        
+        if success:
+            # 显示转换后的JSON动作
+            import json
+            action_json = json.dumps(action, ensure_ascii=False, indent=2) if action else "无"
+            QMessageBox.information(
+                self, 
+                "执行成功", 
+                f"{message}\n\n转换后的动作：\n{action_json}"
+            )
+        else:
+            QMessageBox.warning(
+                self, 
+                "执行失败", 
+                f"{message}\n\n提示：您可以尝试在DSL输入框中手动输入DSL命令。"
+            )
+    
+    def _on_llm_error(self, error_msg: str, msg_box: QMessageBox):
+        """处理LLM调用错误"""
+        # 关闭加载提示
+        if msg_box:
+            msg_box.accept()  # 使用accept()确保对话框正确关闭
+        
+        # 清理线程
+        if self._llm_thread:
+            self._llm_thread.deleteLater()
+            self._llm_thread = None
+        
+        QMessageBox.critical(self, "错误", f"执行自然语言命令时出错: {error_msg}")
+
+
+'''LLM调用工作线程'''
+class LLMWorkerThread(QThread):
+    """LLM调用工作线程"""
+    finished = pyqtSignal(bool, str, object)  # (success, message, action)
+    error = pyqtSignal(str)  # error_message
+    
+    def __init__(self, controller, user_input, parent=None):
+        super().__init__(parent)
+        self.controller = controller
+        self.user_input = user_input
+    
+    def run(self):
+        """在后台线程中执行LLM调用"""
+        try:
+            success, message, action = self.controller.execute_natural_language_command(self.user_input)
+            self.finished.emit(success, message, action)
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"执行自然语言命令时出错: {str(e)}")
+            self.error.emit(str(e))
 
 
 '''自然语言输入对话框'''
@@ -670,10 +747,34 @@ class NaturalLanguageDialog(QDialog):
         return self.input_text.toPlainText().strip()
 
 def main():
-    app = QApplication(sys.argv)
-    win = MainWindow()
-    win.show()
-    sys.exit(app.exec_())
+    try:
+        print("正在初始化QApplication...", file=sys.stderr)
+        app = QApplication(sys.argv)
+        print("正在创建MainWindow...", file=sys.stderr)
+        win = MainWindow()
+        print("正在显示窗口...", file=sys.stderr)
+        win.show()
+        win.raise_()  # 将窗口提升到最前面
+        win.activateWindow()  # 激活窗口
+        print("进入事件循环...", file=sys.stderr)
+        sys.exit(app.exec_())
+    except Exception as e:
+        import traceback
+        error_msg = f"程序启动失败:\n{str(e)}\n\n详细错误信息:\n{traceback.format_exc()}"
+        print(error_msg, file=sys.stderr)
+        
+        # 如果GUI已经初始化，尝试显示错误对话框
+        try:
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Critical)
+            msg.setWindowTitle("启动错误")
+            msg.setText(error_msg)
+            msg.exec_()
+        except:
+            # 如果GUI未初始化，直接打印到控制台
+            pass
+        
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
