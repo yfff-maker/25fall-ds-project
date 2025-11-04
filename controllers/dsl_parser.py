@@ -34,6 +34,7 @@ class CommandType(Enum):
     
     # BST操作
     CREATE_BST = "create_bst"
+    BUILD_BST = "build_bst"
     INSERT_BST = "insert_bst"
     SEARCH_BST = "search_bst"
     DELETE_BST = "delete_bst"
@@ -127,6 +128,10 @@ class DSLParser:
         # BST
         CommandType.CREATE_BST: re.compile(
             r'create\s+bst\s+with\s+(.+)$',
+            re.IGNORECASE
+        ),
+        CommandType.BUILD_BST: re.compile(
+            r'build\s+bst\s+with\s+(.+)$',
             re.IGNORECASE
         ),
         CommandType.INSERT_BST: re.compile(
@@ -282,6 +287,11 @@ class DSLParser:
             values_str = match.group(1).strip()
             args['values'] = [v.strip() for v in values_str.split(',')]
             
+        elif cmd_type == CommandType.BUILD_BST:
+            # build bst with 50,30,70,20,40,60,80
+            values_str = match.group(1).strip()
+            args['values'] = [v.strip() for v in values_str.split(',')]
+            
         elif cmd_type == CommandType.INSERT_BST:
             # insert 25 in bst
             args['value'] = match.group(1).strip()
@@ -335,6 +345,7 @@ class DSLParser:
             CommandType.DELETE_BINARYTREE: "BinaryTree",
             
             CommandType.CREATE_BST: "BST",
+            CommandType.BUILD_BST: "BST",
             CommandType.INSERT_BST: "BST",
             CommandType.SEARCH_BST: "BST",
             CommandType.DELETE_BST: "BST",

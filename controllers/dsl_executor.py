@@ -111,6 +111,12 @@ class DSLExecutor:
                     self.controller.insert_bst(val)
                 return True, f"已创建BST: {','.join(values)}"
             
+            elif command.type == CommandType.BUILD_BST:
+                # BST批量构建（自动顺序插入动画）
+                values = command.args['values']
+                self.controller.build_bst(values)
+                return True, f"正在构建BST: {','.join(values)}"
+            
             elif command.type == CommandType.INSERT_BST:
                 value = command.args['value']
                 self.controller.insert_bst(value)

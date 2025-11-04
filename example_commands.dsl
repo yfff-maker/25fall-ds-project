@@ -36,7 +36,7 @@ delete 4 from binarytree
 # ========================
 # 二叉搜索树操作
 # ========================
-create bst with 50,30,70,20,40,60,80
+build bst with 50,30,70,20,40,60,80
 insert 25 in bst
 search 60 in bst
 delete 30 from bst

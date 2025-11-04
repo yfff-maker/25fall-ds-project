@@ -64,6 +64,7 @@ class MainController(QObject):
         self._huffman_animation_paused = False  # 哈夫曼树动画暂停状态
         self._huffman_animation_paused_time = 0  # 暂停时的时间
         self._huffman_animation_pause_offset = 0  # 暂停时间偏移
+        self._bst_build_queue = []  # BST批量构建队列
         
         # 初始化DSL解析器和执行器
         self.dsl_parser = DSLParser()
@@ -510,6 +511,44 @@ class MainController(QObject):
             # 最终更新显示
             self._update_snapshot()
             self._animation_timer.deleteLater()
+            
+            # 检查是否有待插入的BST节点（批量构建）
+            if self._bst_build_queue:
+                self._insert_next_bst_value()
+    
+    def _insert_next_bst_value(self):
+        """插入BST批量构建队列中的下一个值"""
+        if not self._bst_build_queue:
+            return
+        
+        next_value = self._bst_build_queue.pop(0)
+        self.insert_bst(next_value)
+    
+    def build_bst(self, values):
+        """批量构建BST（自动顺序插入动画）"""
+        try:
+            if not values:
+                self._show_warning("请输入要构建的节点值")
+                return
+            
+            structure = self._get_current_structure()
+            if not structure:
+                self._show_error("构建失败", "BST结构不存在")
+                return
+            
+            # 初始化队列
+            self._bst_build_queue = list(values) if isinstance(values, list) else [v.strip() for v in str(values).split(',') if v.strip()]
+            
+            if not self._bst_build_queue:
+                self._show_warning("请输入有效的节点值")
+                return
+            
+            # 开始插入第一个节点
+            self._insert_next_bst_value()
+            
+        except Exception as e:
+            self._show_error("构建失败", str(e))
+            self._bst_build_queue = []  # 清空队列
     
     def pop_stack(self):
         """出栈"""
