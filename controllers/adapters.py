@@ -1475,6 +1475,61 @@ class BSTAdapter:
         else:
             snapshot.comparison_text = ""
         
+        # 处理创建根节点动画（必须在检查root之前，因为树为空时也需要显示动画）
+        if animation_state == 'creating_root':
+            new_value = getattr(bst, '_new_value', None)
+            if new_value is not None:
+                # 计算目标位置（根节点位置）
+                target_x = start_x
+                target_y = y
+                
+                # 计算起始位置（屏幕正上方）
+                start_x_pos = target_x
+                start_y_pos = 50  # 屏幕正上方
+                
+                # 使用线性插值计算当前位置
+                current_x = start_x_pos + (target_x - start_x_pos) * animation_progress
+                current_y = start_y_pos + (target_y - start_y_pos) * animation_progress
+                
+                # 创建动画中的根节点
+                node_snapshot = NodeSnapshot(
+                    id="animating_root",
+                    value=str(new_value),
+                    x=current_x - 30,
+                    y=current_y - 20,
+                    node_type="box",
+                    width=60,
+                    height=40,
+                    color="#FF6B6B"  # 红色表示正在移动
+                )
+                snapshot.nodes.append(node_snapshot)
+                
+                # 显示根指针（即使树为空，动画时也要显示）
+                root_pointer_x = start_x - 30
+                root_pointer_y = y - 50
+                root_pointer_box = BoxSnapshot(
+                    id="root_pointer",
+                    value="root",
+                    x=root_pointer_x,
+                    y=root_pointer_y,
+                    width=60,
+                    height=30,
+                    color="#FFD700"  # 金色
+                )
+                snapshot.boxes.append(root_pointer_box)
+                
+                # 添加根指针到动画节点的连接
+                root_edge = EdgeSnapshot(
+                    from_id="root_pointer",
+                    to_id="animating_root",
+                    arrow_type="arrow"
+                )
+                root_edge.from_x = root_pointer_x + 30
+                root_edge.from_y = root_pointer_y + 30
+                root_edge.to_x = current_x
+                root_edge.to_y = current_y - 20
+                snapshot.edges.append(root_edge)
+        
         if not bst.root:
             return snapshot
         
@@ -1642,8 +1697,8 @@ class BSTAdapter:
         )
         snapshot.boxes.append(root_pointer_box)
         
-        # 添加根指针到根节点的连接
-        if bst.root:
+        # 添加根指针到根节点的连接（只有在不是creating_root动画时才添加，避免重复）
+        if bst.root and animation_state != 'creating_root':
             root_edge = EdgeSnapshot(
                 from_id="root_pointer",
                 to_id=f"node_{id(bst.root)}",
@@ -1654,35 +1709,6 @@ class BSTAdapter:
             root_edge.to_x = start_x  # 到根节点中心
             root_edge.to_y = y - 20  # 到根节点顶部
             snapshot.edges.append(root_edge)
-        
-        # 处理创建根节点动画
-        if animation_state == 'creating_root':
-            new_value = getattr(bst, '_new_value', None)
-            if new_value is not None:
-                # 计算目标位置（根节点位置）
-                target_x = start_x
-                target_y = y
-                
-                # 计算起始位置（屏幕正上方）
-                start_x_pos = target_x
-                start_y_pos = 50  # 屏幕正上方
-                
-                # 使用线性插值计算当前位置
-                current_x = start_x_pos + (target_x - start_x_pos) * animation_progress
-                current_y = start_y_pos + (target_y - start_y_pos) * animation_progress
-                
-                # 创建动画中的根节点
-                node_snapshot = NodeSnapshot(
-                    id="animating_root",
-                    value=str(new_value),
-                    x=current_x - 30,
-                    y=current_y - 20,
-                    node_type="box",
-                    width=60,
-                    height=40,
-                    color="#FF6B6B"  # 红色表示正在移动
-                )
-                snapshot.nodes.append(node_snapshot)
         
         # 处理插入节点动画
         elif animation_state == 'inserting':

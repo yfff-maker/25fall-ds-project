@@ -485,36 +485,31 @@ class MainController(QObject):
         # 如果动画完成，停止定时器并完成操作
         if progress >= 1.0:
             self._animation_timer.stop()
-            if structure._animation_state == 'creating_root':
-                # 创建根节点
-                structure.root = structure.Node(structure._new_value)
-                structure._animation_state = None
-                structure._animation_progress = 0.0
-                structure._new_value = None
-            elif structure._animation_state == 'inserting':
-                # 插入新节点
-                if structure._parent_value and structure._insert_position:
-                    parent_node = structure.find_node_by_value(structure._parent_value)
-                    if parent_node:
-                        new_node = structure.Node(structure._new_value)
-                        if structure._insert_position == 'left':
-                            parent_node.left = new_node
-                        else:  # right
-                            parent_node.right = new_node
-                
-                structure._animation_state = None
-                structure._animation_progress = 0.0
-                structure._new_value = None
-                structure._parent_value = None
-                structure._insert_position = None
+            
+            # 调用complete_insert_animation()来正确完成插入操作
+            # 这会使用BST的递归插入逻辑，而不是手动插入
+            if structure._animation_state in ['creating_root', 'inserting']:
+                structure.complete_insert_animation()
+            
+            # 重置动画计时器，确保下一个节点的动画能正确计时
+            self._animation_start_time = 0
             
             # 最终更新显示
             self._update_snapshot()
-            self._animation_timer.deleteLater()
+            
+            # 保存队列状态，因为deleteLater()后可能会影响self引用
+            has_next = bool(self._bst_build_queue)
+            
+            # 清理定时器
+            old_timer = self._animation_timer
+            self._animation_timer = None  # 先清空引用
+            old_timer.deleteLater()
             
             # 检查是否有待插入的BST节点（批量构建）
-            if self._bst_build_queue:
-                self._insert_next_bst_value()
+            # 使用QTimer.singleShot延迟一小段时间，确保前一个定时器完全清理
+            if has_next:
+                from PyQt5.QtCore import QTimer
+                QTimer.singleShot(100, self._insert_next_bst_value)
     
     def _insert_next_bst_value(self):
         """插入BST批量构建队列中的下一个值"""
@@ -542,6 +537,9 @@ class MainController(QObject):
             if not self._bst_build_queue:
                 self._show_warning("请输入有效的节点值")
                 return
+            
+            # 立即更新视图，确保切换到BST视图可见（即使树为空）
+            self._update_snapshot()
             
             # 开始插入第一个节点
             self._insert_next_bst_value()
@@ -878,6 +876,12 @@ class MainController(QObject):
             
             structure = self._get_current_structure()
             if structure:
+                # 如果已有定时器在运行，先停止并清理
+                if hasattr(self, '_animation_timer') and self._animation_timer is not None:
+                    self._animation_timer.stop()
+                    self._animation_timer.deleteLater()
+                    self._animation_timer = None
+                
                 # 开始插入动画
                 structure.insert(value)
                 
@@ -1304,9 +1308,10 @@ class MainController(QObject):
     
     # ========== 自然语言处理功能 ==========
     
-    def execute_natural_language_command(self, user_input: str) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    def convert_natural_language_to_action(self, user_input: str) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
         """
-        执行自然语言命令
+        将自然语言转换为动作（仅转换，不执行）
+        用于在工作线程中调用LLM API
         
         Args:
             user_input: 用户的自然语言输入
@@ -1325,7 +1330,37 @@ class MainController(QObject):
             if action is None:
                 return False, "LLM转换失败，请检查输入是否明确，或尝试手动输入DSL命令", None
             
-            # 执行动作
+            return True, "转换成功", action
+            
+        except ValueError as e:
+            # API密钥未设置
+            return False, str(e), None
+        except Exception as e:
+            return False, f"转换失败: {str(e)}", None
+    
+    def execute_natural_language_command(self, user_input: str) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+        """
+        执行自然语言命令（完整流程：转换+执行）
+        此方法在主线程中调用，确保动画正常
+        
+        Args:
+            user_input: 用户的自然语言输入
+            
+        Returns:
+            (成功标志, 消息文本, 转换后的动作JSON)
+        """
+        try:
+            # 检查API密钥
+            if not self.llm_service.check_api_key():
+                return False, "未设置OPENROUTER_API_KEY环境变量，请在系统环境变量中设置", None
+            
+            # 转换为JSON动作
+            action = self.llm_service.convert_natural_language_to_action(user_input)
+            
+            if action is None:
+                return False, "LLM转换失败，请检查输入是否明确，或尝试手动输入DSL命令", None
+            
+            # 执行动作（在主线程中执行，确保动画正常）
             success, message = self.action_executor.execute_action(action)
             
             return success, message, action

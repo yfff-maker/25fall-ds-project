@@ -723,19 +723,37 @@ class MainWindow(QMainWindow):
             self._llm_thread.deleteLater()
             self._llm_thread = None
         
-        if success:
-            # 显示转换后的JSON动作
-            import json
-            action_json = json.dumps(action, ensure_ascii=False, indent=2) if action else "无"
-            QMessageBox.information(
-                self, 
-                "执行成功", 
-                f"{message}\n\n转换后的动作：\n{action_json}"
-            )
+        if success and action:
+            # 在主线程中执行操作（确保动画正常）
+            try:
+                exec_success, exec_message = self.controller.action_executor.execute_action(action)
+                
+                # 显示转换后的JSON动作和执行结果
+                import json
+                action_json = json.dumps(action, ensure_ascii=False, indent=2) if action else "无"
+                
+                if exec_success:
+                    QMessageBox.information(
+                        self, 
+                        "执行成功", 
+                        f"{exec_message}\n\n转换后的动作：\n{action_json}"
+                    )
+                else:
+                    QMessageBox.warning(
+                        self, 
+                        "执行失败", 
+                        f"{exec_message}\n\n转换后的动作：\n{action_json}\n\n提示：您可以尝试在DSL输入框中手动输入DSL命令。"
+                    )
+            except Exception as e:
+                QMessageBox.critical(
+                    self,
+                    "执行错误",
+                    f"执行操作时出错: {str(e)}"
+                )
         else:
             QMessageBox.warning(
                 self, 
-                "执行失败", 
+                "转换失败", 
                 f"{message}\n\n提示：您可以尝试在DSL输入框中手动输入DSL命令。"
             )
     
@@ -765,9 +783,10 @@ class LLMWorkerThread(QThread):
         self.user_input = user_input
     
     def run(self):
-        """在后台线程中执行LLM调用"""
+        """在后台线程中执行LLM调用（仅转换，不执行操作）"""
         try:
-            success, message, action = self.controller.execute_natural_language_command(self.user_input)
+            # 只进行LLM转换，不执行操作（操作必须在主线程中执行以支持动画）
+            success, message, action = self.controller.convert_natural_language_to_action(self.user_input)
             self.finished.emit(success, message, action)
         except Exception as e:
             self.error.emit(str(e))

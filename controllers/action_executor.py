@@ -137,9 +137,8 @@ class ActionExecutor:
         """执行BST操作"""
         if operation == "create":
             values = params.get("values", [])
-            for val in values:
-                self.controller.insert_bst(val)
-            return True, f"已创建BST: {','.join(values)}"
+            self.controller.build_bst(values)
+            return True, f"正在构建BST: {','.join(values)}"
         elif operation == "insert":
             value = params.get("value")
             self.controller.insert_bst(value)
