@@ -41,6 +41,7 @@ class CommandType(Enum):
     
     # AVL树操作
     CREATE_AVL = "create_avl"
+    BUILD_AVL = "build_avl"
     INSERT_AVL = "insert_avl"
     CLEAR_AVL = "clear_avl"
     
@@ -150,6 +151,10 @@ class DSLParser:
         # AVL树
         CommandType.CREATE_AVL: re.compile(
             r'create\s+avl\s+with\s+(.+)$',
+            re.IGNORECASE
+        ),
+        CommandType.BUILD_AVL: re.compile(
+            r'build\s+avl\s+with\s+(.+)$',
             re.IGNORECASE
         ),
         CommandType.INSERT_AVL: re.compile(
@@ -309,6 +314,11 @@ class DSLParser:
             values_str = match.group(1).strip()
             args['values'] = [v.strip() for v in values_str.split(',')]
             
+        elif cmd_type == CommandType.BUILD_AVL:
+            # build avl with 7,19,16,27,9,5,14,11,17,12
+            values_str = match.group(1).strip()
+            args['values'] = [v.strip() for v in values_str.split(',')]
+            
         elif cmd_type == CommandType.INSERT_AVL:
             # insert 25 in avl
             args['value'] = match.group(1).strip()
@@ -351,6 +361,7 @@ class DSLParser:
             CommandType.DELETE_BST: "BST",
             
             CommandType.CREATE_AVL: "AVL",
+            CommandType.BUILD_AVL: "AVL",
             CommandType.INSERT_AVL: "AVL",
             CommandType.CLEAR_AVL: "AVL",
             

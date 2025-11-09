@@ -133,11 +133,16 @@ class DSLExecutor:
                 return True, f"已从BST删除: {value}"
             
             elif command.type == CommandType.CREATE_AVL:
-                # AVL逐个插入构建
+                # AVL批量构建（create命令也使用build_avl）
                 values = command.args['values']
-                for val in values:
-                    self.controller.insert_avl(val)
-                return True, f"已创建AVL树: {','.join(values)}"
+                self.controller.build_avl(values)
+                return True, f"正在构建AVL树: {','.join(values)}"
+            
+            elif command.type == CommandType.BUILD_AVL:
+                # AVL批量构建（自动顺序插入动画）
+                values = command.args['values']
+                self.controller.build_avl(values)
+                return True, f"正在构建AVL树: {','.join(values)}"
             
             elif command.type == CommandType.INSERT_AVL:
                 value = command.args['value']

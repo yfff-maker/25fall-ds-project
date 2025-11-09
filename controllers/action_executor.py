@@ -158,9 +158,8 @@ class ActionExecutor:
         """执行AVL树操作"""
         if operation == "create":
             values = params.get("values", [])
-            for val in values:
-                self.controller.insert_avl(val)
-            return True, f"已创建AVL树: {','.join(values)}"
+            self.controller.build_avl(values)
+            return True, f"正在构建AVL树: {','.join(values)}"
         elif operation == "insert":
             value = params.get("value")
             self.controller.insert_avl(value)

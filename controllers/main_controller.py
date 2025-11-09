@@ -73,6 +73,7 @@ class MainController(QObject):
         self._huffman_animation_paused_time = 0  # 暂停时的时间
         self._huffman_animation_pause_offset = 0  # 暂停时间偏移
         self._bst_build_queue = []  # BST批量构建队列
+        self._avl_build_queue = []  # AVL批量构建队列
         
         # 初始化DSL解析器和执行器
         self.dsl_parser = DSLParser()
@@ -540,6 +541,14 @@ class MainController(QObject):
         next_value = self._bst_build_queue.pop(0)
         self.insert_bst(next_value)
     
+    def _insert_next_avl_value(self):
+        """插入AVL批量构建队列中的下一个值"""
+        if not self._avl_build_queue:
+            return
+        
+        next_value = self._avl_build_queue.pop(0)
+        self.insert_avl(next_value)
+    
     def build_bst(self, values):
         """批量构建BST（自动顺序插入动画）"""
         try:
@@ -568,6 +577,35 @@ class MainController(QObject):
         except Exception as e:
             self._show_error("构建失败", str(e))
             self._bst_build_queue = []  # 清空队列
+    
+    def build_avl(self, values):
+        """批量构建AVL树（自动顺序插入动画）"""
+        try:
+            if not values:
+                self._show_warning("请输入要构建的节点值")
+                return
+            
+            structure = self.structures.get("AVL")
+            if not structure:
+                self._show_error("构建失败", "AVL结构不存在")
+                return
+            
+            # 初始化队列
+            self._avl_build_queue = list(values) if isinstance(values, list) else [v.strip() for v in str(values).split(',') if v.strip()]
+            
+            if not self._avl_build_queue:
+                self._show_warning("请输入有效的节点值")
+                return
+            
+            # 立即更新视图，确保切换到AVL视图可见（即使树为空）
+            self._update_snapshot()
+            
+            # 开始插入第一个节点
+            self._insert_next_avl_value()
+            
+        except Exception as e:
+            self._show_error("构建失败", str(e))
+            self._avl_build_queue = []  # 清空队列
     
     def pop_stack(self):
         """出栈"""
@@ -1394,8 +1432,25 @@ class MainController(QObject):
             # 执行实际的插入操作
             structure.complete_insert_animation()
             
+            # 重置动画计时器，确保下一个节点的动画能正确计时
+            self._animation_start_time = 0
+            
+            # 最终更新显示
             self._update_snapshot()
-            self._animation_timer.deleteLater()
+            
+            # 保存队列状态，因为deleteLater()后可能会影响self引用
+            has_next = bool(self._avl_build_queue)
+            
+            # 清理定时器
+            old_timer = self._animation_timer
+            self._animation_timer = None  # 先清空引用
+            old_timer.deleteLater()
+            
+            # 检查是否有待插入的AVL节点（批量构建）
+            # 使用QTimer.singleShot延迟一小段时间，确保前一个定时器完全清理
+            if has_next:
+                from PyQt5.QtCore import QTimer
+                QTimer.singleShot(100, self._insert_next_avl_value)
     
     def clear_avl(self):
         """清空AVL树"""
