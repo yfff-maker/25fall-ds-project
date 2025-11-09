@@ -286,10 +286,10 @@ class MainController(QObject):
                 # 创建动画定时器
                 self._animation_timer = QTimer()
                 self._animation_timer.timeout.connect(lambda: self._update_linked_list_animation(structure))
-                self._animation_timer.start(50)  # 每50ms更新一次，实现平滑效果
+                self._animation_timer.start(100)  # 每100ms更新一次，实现平滑效果
                 
                 # 设置动画总时长
-                self._animation_duration = 1000  # 1秒总时长
+                self._animation_duration = 2000  # 2秒总时长
                 self._animation_start_time = 0
         except Exception as e:
             self._show_error("插入失败", str(e))
