@@ -3494,6 +3494,51 @@ class AVLAdapter:
     """AVL树适配器 - 支持平衡因子显示和旋转动画"""
     
     @staticmethod
+    def _rotate_point(cx, cy, x, y, theta_rad):
+        """以 (cx,cy) 为圆心，将点 (x,y) 逆时针旋转 theta_rad 弧度"""
+        import math
+        dx, dy = x - cx, y - cy
+        ct, st = math.cos(theta_rad), math.sin(theta_rad)
+        return cx + dx * ct - dy * st, cy + dx * st + dy * ct
+    
+    @staticmethod
+    def _find_node_by_value(node, value):
+        """根据值查找节点对象"""
+        if not node:
+            return None
+        if node.value == value:
+            return node
+        left_result = AVLAdapter._find_node_by_value(node.left, value)
+        if left_result:
+            return left_result
+        return AVLAdapter._find_node_by_value(node.right, value)
+    
+    @staticmethod
+    def _rotate_subtree(subtree_root, positions, center_x, center_y, theta):
+        """递归旋转子树中的所有节点，所有节点都围绕同一个中心点旋转"""
+        import math
+        if not subtree_root:
+            return
+        
+        # 递归处理左子树
+        if subtree_root.left and subtree_root.left in positions:
+            left_x, left_y = positions[subtree_root.left]
+            # 左子节点围绕中心点旋转
+            new_left_x, new_left_y = AVLAdapter._rotate_point(center_x, center_y, left_x, left_y, theta)
+            positions[subtree_root.left] = (new_left_x, new_left_y)
+            # 递归处理左子树
+            AVLAdapter._rotate_subtree(subtree_root.left, positions, center_x, center_y, theta)
+        
+        # 递归处理右子树
+        if subtree_root.right and subtree_root.right in positions:
+            right_x, right_y = positions[subtree_root.right]
+            # 右子节点围绕中心点旋转
+            new_right_x, new_right_y = AVLAdapter._rotate_point(center_x, center_y, right_x, right_y, theta)
+            positions[subtree_root.right] = (new_right_x, new_right_y)
+            # 递归处理右子树
+            AVLAdapter._rotate_subtree(subtree_root.right, positions, center_x, center_y, theta)
+    
+    @staticmethod
     def _layout_tree(node, start_x, y, level_height, node_width, min_spacing):
         """计算AVL树节点位置 - 使用与BST相同的布局算法"""
         if not node:
@@ -3621,6 +3666,166 @@ class AVLAdapter:
         positions = AVLAdapter._layout_tree(
             avl.root, start_x, y, level_height, node_width, min_spacing)
         
+        # 检查旋转计划并应用旋转动画
+        import math
+        rotation_plan = getattr(avl, '_rotation_plan', None)
+        rotation_nodes = getattr(avl, '_rotation_nodes', []) or []
+        
+        # 添加调试输出
+        print(f"DEBUG - Adapter: animation_state={animation_state}, progress={animation_progress}")
+        print(f"DEBUG - Adapter: rotation_plan={rotation_plan}")
+        
+        # 放宽触发条件：只要有 rotation_plan 且进度>=0.85 就应用旋转
+        if rotation_plan and animation_state == 'inserting' and animation_progress >= 0.85:
+            rtype = rotation_plan.get('type')
+            plan_nodes = rotation_plan.get('nodes', [])
+            
+            print(f"DEBUG - Applying rotation: type={rtype}, nodes={plan_nodes}, progress={animation_progress}")
+            
+            # 获取参与旋转的节点对象和位置
+            def get_node_pos(val):
+                """根据节点值获取节点对象和位置"""
+                node_obj = AVLAdapter._find_node_by_value(avl.root, val)
+                if node_obj and node_obj in positions:
+                    return node_obj, positions[node_obj]
+                return None, None
+            
+            # 获取旋转中心（失衡节点，即 pivot）
+            if len(plan_nodes) > 0:
+                pivot_val = plan_nodes[0]
+                pivot_node, pivot_pos = get_node_pos(pivot_val)
+                
+                if pivot_node and pivot_pos:
+                    px, py = pivot_pos
+                    
+                    # 获取旋转的子节点（重子）
+                    if len(plan_nodes) > 1:
+                        child_val = plan_nodes[1]
+                        child_node, child_pos = get_node_pos(child_val)
+                        
+                        if child_node and child_pos:
+                            cx, cy = child_pos
+                            
+                            # 计算旋转角度：根据进度和旋转阶段
+                            # 对于插入动画，旋转阶段在 progress >= 0.85 时开始
+                            # 将 0.85-1.0 映射到 0.0-1.0
+                            if animation_state == 'inserting':
+                                phase_breaks = getattr(avl, '_phase_breaks', (0.35, 0.75, 0.85, 1.0))
+                                rotation_start = phase_breaks[2]  # 0.85
+                                rotation_end = phase_breaks[3]    # 1.0
+                                if animation_progress >= rotation_start:
+                                    # 将进度映射到 0.0-1.0
+                                    rotation_progress = (animation_progress - rotation_start) / (rotation_end - rotation_start)
+                                    rotation_progress = max(0.0, min(1.0, rotation_progress))
+                                else:
+                                    rotation_progress = 0.0
+                            else:
+                                rotation_progress = max(0.0, min(1.0, animation_progress))
+                            
+                            # 根据旋转类型应用旋转
+                            if rtype == 'LL':
+                                # LL: 左子节点围绕父节点逆时针旋转 90°
+                                theta = (math.pi / 2.0) * rotation_progress
+                                rcx, rcy = AVLAdapter._rotate_point(px, py, cx, cy, +theta)
+                                positions[child_node] = (rcx, rcy)
+                                
+                                # 旋转整个左子树（child_node 的所有后代）
+                                AVLAdapter._rotate_subtree(child_node, positions, px, py, theta)
+                                
+                                if rotation_progress > 0:
+                                    snapshot.step_details = f"AVL旋转：LL 子树围绕父节点逆时针旋转 ({int(rotation_progress * 100)}%)"
+                                    
+                            elif rtype == 'RR':
+                                # RR: 右子节点围绕父节点顺时针旋转 90°
+                                theta = (math.pi / 2.0) * rotation_progress
+                                rcx, rcy = AVLAdapter._rotate_point(px, py, cx, cy, -theta)
+                                positions[child_node] = (rcx, rcy)
+                                
+                                # 旋转整个右子树
+                                AVLAdapter._rotate_subtree(child_node, positions, px, py, -theta)
+                                
+                                if rotation_progress > 0:
+                                    snapshot.step_details = f"AVL旋转：RR 子树围绕父节点顺时针旋转 ({int(rotation_progress * 100)}%)"
+                                    
+                            elif rtype == 'LR':
+                                # LR: 双步旋转
+                                # 第一步：child 的左子树围绕 child 的右子节点顺时针旋转
+                                # 第二步：child 围绕 pivot 逆时针旋转
+                                if len(plan_nodes) > 2:
+                                    mid_val = plan_nodes[2]  # 中间节点（child 的右子节点）
+                                    mid_node, mid_pos = get_node_pos(mid_val)
+                                    
+                                    if mid_node and mid_pos:
+                                        mx, my = mid_pos
+                                        
+                                        def two_step_rotation(progress, first_step_fn, second_step_fn):
+                                            if progress < 0.5:
+                                                p = progress / 0.5
+                                                return first_step_fn(p)
+                                            else:
+                                                p = (progress - 0.5) / 0.5
+                                                return second_step_fn(p)
+                                        
+                                        def step1(p):
+                                            # 第一步：child 围绕 mid 顺时针旋转 90°
+                                            th = (math.pi / 2.0) * p
+                                            rcx, rcy = AVLAdapter._rotate_point(mx, my, cx, cy, -th)
+                                            positions[child_node] = (rcx, rcy)
+                                            AVLAdapter._rotate_subtree(child_node, positions, mx, my, -th)
+                                        
+                                        def step2(p):
+                                            # 第二步：child（已旋转）围绕 pivot 逆时针旋转 90°
+                                            # 需要获取 child 的当前位置
+                                            current_child_pos = positions.get(child_node, child_pos)
+                                            th = (math.pi / 2.0) * p
+                                            rcx, rcy = AVLAdapter._rotate_point(px, py, current_child_pos[0], current_child_pos[1], +th)
+                                            positions[child_node] = (rcx, rcy)
+                                            AVLAdapter._rotate_subtree(child_node, positions, px, py, +th)
+                                        
+                                        two_step_rotation(rotation_progress, step1, step2)
+                                        
+                                        if rotation_progress > 0:
+                                            snapshot.step_details = f"AVL旋转：LR 双步旋转（先RR后LL） ({int(rotation_progress * 100)}%)"
+                                
+                            elif rtype == 'RL':
+                                # RL: 双步旋转
+                                # 第一步：child 的右子树围绕 child 的左子节点逆时针旋转
+                                # 第二步：child 围绕 pivot 顺时针旋转
+                                if len(plan_nodes) > 2:
+                                    mid_val = plan_nodes[2]  # 中间节点（child 的左子节点）
+                                    mid_node, mid_pos = get_node_pos(mid_val)
+                                    
+                                    if mid_node and mid_pos:
+                                        mx, my = mid_pos
+                                        
+                                        def two_step_rotation(progress, first_step_fn, second_step_fn):
+                                            if progress < 0.5:
+                                                p = progress / 0.5
+                                                return first_step_fn(p)
+                                            else:
+                                                p = (progress - 0.5) / 0.5
+                                                return second_step_fn(p)
+                                        
+                                        def step1(p):
+                                            # 第一步：child 围绕 mid 逆时针旋转 90°
+                                            th = (math.pi / 2.0) * p
+                                            rcx, rcy = AVLAdapter._rotate_point(mx, my, cx, cy, +th)
+                                            positions[child_node] = (rcx, rcy)
+                                            AVLAdapter._rotate_subtree(child_node, positions, mx, my, +th)
+                                        
+                                        def step2(p):
+                                            # 第二步：child（已旋转）围绕 pivot 顺时针旋转 90°
+                                            current_child_pos = positions.get(child_node, child_pos)
+                                            th = (math.pi / 2.0) * p
+                                            rcx, rcy = AVLAdapter._rotate_point(px, py, current_child_pos[0], current_child_pos[1], -th)
+                                            positions[child_node] = (rcx, rcy)
+                                            AVLAdapter._rotate_subtree(child_node, positions, px, py, -th)
+                                        
+                                        two_step_rotation(rotation_progress, step1, step2)
+                                        
+                                        if rotation_progress > 0:
+                                            snapshot.step_details = f"AVL旋转：RL 双步旋转（先LL后RR） ({int(rotation_progress * 100)}%)"
+        
         # 生成节点快照
         for node, (x, y_pos) in positions.items():
             node_id = f"node_{id(node)}"
@@ -3662,13 +3867,8 @@ class AVLAdapter:
                 node_color = "#1f4e79"  # 深蓝色表示正常节点
                 border_color = None
             
-            # 处理旋转动画中的位置插值
-            if is_rotating_node and hasattr(avl, '_rotation_type') and avl._rotation_type:
-                # 根据旋转类型计算弧线轨迹
-                current_x, current_y = AVLAdapter._calculate_rotation_position(
-                    node, x, y_pos, avl._rotation_type, animation_progress)
-            else:
-                current_x, current_y = x, y_pos
+            # 使用 positions 中已更新的位置（如果节点参与了旋转，位置已在前面更新）
+            current_x, current_y = x, y_pos
             
             node_snapshot = NodeSnapshot(
                 id=node_id,
@@ -3739,45 +3939,3 @@ class AVLAdapter:
         snapshot.edges.append(root_arrow)
         
         return snapshot
-    
-    @staticmethod
-    def _calculate_rotation_position(node, base_x, base_y, rotation_type, progress):
-        """计算旋转动画中的节点位置"""
-        if not hasattr(AVLAdapter, '_rotation_centers'):
-            AVLAdapter._rotation_centers = {}
-        
-        # 根据旋转类型计算弧线轨迹
-        if rotation_type == 'LL':
-            # 右旋：左子节点上移，父节点下移
-            if progress < 0.5:
-                # 前半段：左子节点沿弧线上移
-                angle = progress * 2 * 3.14159  # 0 到 π
-                radius = 50
-                offset_x = radius * (1 - abs(progress - 0.5) * 2)
-                offset_y = -radius * abs(progress - 0.5) * 2
-            else:
-                # 后半段：父节点沿弧线下移
-                angle = (progress - 0.5) * 2 * 3.14159  # 0 到 π
-                radius = 50
-                offset_x = -radius * (progress - 0.5) * 2
-                offset_y = radius * (progress - 0.5) * 2
-        elif rotation_type == 'RR':
-            # 左旋：右子节点上移，父节点下移
-            if progress < 0.5:
-                # 前半段：右子节点沿弧线上移
-                angle = progress * 2 * 3.14159
-                radius = 50
-                offset_x = -radius * (1 - abs(progress - 0.5) * 2)
-                offset_y = -radius * abs(progress - 0.5) * 2
-            else:
-                # 后半段：父节点沿弧线下移
-                angle = (progress - 0.5) * 2 * 3.14159
-                radius = 50
-                offset_x = radius * (progress - 0.5) * 2
-                offset_y = radius * (progress - 0.5) * 2
-        else:
-            # LR 和 RL 类型使用更复杂的轨迹
-            offset_x = 0
-            offset_y = 0
-        
-        return base_x + offset_x, base_y + offset_y

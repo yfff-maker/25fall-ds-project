@@ -1358,10 +1358,10 @@ class MainController(QObject):
                 from PyQt5.QtCore import QTimer
                 self._animation_timer = QTimer()
                 self._animation_timer.timeout.connect(lambda: self._update_avl_animation(structure))
-                self._animation_timer.start(100)  # 每100ms更新一次
+                self._animation_timer.start(50)  # 每50ms更新一次
                 
-                # 设置动画总时长
-                self._animation_duration = 2000  # 2秒总时长
+                # 设置动画总时长 - 增加时长以便观察旋转
+                self._animation_duration = 3000  # 改为3秒，方便观察
                 self._animation_start_time = 0
                 
                 self._update_snapshot()
@@ -1380,7 +1380,9 @@ class MainController(QObject):
         
         # 计算动画进度 (0.0 到 1.0)
         progress = min(elapsed / self._animation_duration, 1.0)
-        structure.update_animation_progress(progress)
+        
+        # 调用四阶段动画更新方法（关键修改）
+        structure.update_insert_animation(progress)
         
         # 更新显示
         self._update_snapshot()

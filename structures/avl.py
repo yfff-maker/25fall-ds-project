@@ -73,8 +73,13 @@ class AVLModel(BaseStructure):
         
         # 预演一次插入（影子树），推导首个失衡与旋转类型，仅用于可视化
         shadow_root = self._clone_tree(self.root)
-        shadow_root = self._shadow_insert(shadow_root, v)
+        shadow_root = self._shadow_insert_no_rotate(shadow_root, v)  # 使用不旋转的版本，以便分析失衡节点
         self._rotation_plan = self._analyze_first_imbalance_and_rotation(shadow_root)
+        
+        # 添加调试输出
+        print(f"DEBUG - AVL Insert: value={v}")
+        print(f"DEBUG - Insert path: {self._insert_path}")
+        print(f"DEBUG - Rotation plan: {self._rotation_plan}")
 
     def _calculate_insert_path(self, node, value):
         """计算插入路径（用于比较动画）"""
@@ -168,10 +173,23 @@ class AVLModel(BaseStructure):
                 return self._rotate_left(node)
         return node
 
+    def _shadow_insert_no_rotate(self, node, value):
+        """影子插入，只插入和更新高度，不执行旋转（用于分析失衡节点）"""
+        if not node:
+            return self.Node(value)
+        if value < node.value:
+            node.left = self._shadow_insert_no_rotate(node.left, value)
+        elif value > node.value:
+            node.right = self._shadow_insert_no_rotate(node.right, value)
+        self._update_height(node)
+        return node  # 不执行旋转，直接返回
+
     def _analyze_first_imbalance_and_rotation(self, root_after):
+        """分析首个失衡节点和旋转类型"""
         plan = None
         v = self._new_value
-        # 重新走到插入值所在的节点
+        
+        # 从根开始，沿着插入路径找到第一个失衡节点
         path = []
         current = root_after
         while current:
@@ -182,20 +200,50 @@ class AVLModel(BaseStructure):
                 current = current.right
             else:
                 break
+        
+        # 从底向上检查，找到第一个失衡节点
         for node in reversed(path):
             bf = self._get_balance_factor(node)
             if abs(bf) > 1:
-                if bf > 1:
-                    if self._get_balance_factor(node.left) >= 0:
-                        plan = {'type': 'LL', 'nodes': [node.value, node.left.value]}
+                # 找到失衡节点，判断旋转类型
+                if bf > 1:  # 左子树更高
+                    left_bf = self._get_balance_factor(node.left) if node.left else 0
+                    if left_bf >= 0:
+                        # LL型
+                        plan = {
+                            'type': 'LL',
+                            'nodes': [node.value, node.left.value if node.left else None]
+                        }
                     else:
-                        plan = {'type': 'LR', 'nodes': [node.value, node.left.value, node.left.right.value]}
-                else:
-                    if self._get_balance_factor(node.right) <= 0:
-                        plan = {'type': 'RR', 'nodes': [node.value, node.right.value]}
+                        # LR型
+                        plan = {
+                            'type': 'LR',
+                            'nodes': [
+                                node.value,
+                                node.left.value if node.left else None,
+                                node.left.right.value if (node.left and node.left.right) else None
+                            ]
+                        }
+                else:  # bf < -1, 右子树更高
+                    right_bf = self._get_balance_factor(node.right) if node.right else 0
+                    if right_bf <= 0:
+                        # RR型
+                        plan = {
+                            'type': 'RR',
+                            'nodes': [node.value, node.right.value if node.right else None]
+                        }
                     else:
-                        plan = {'type': 'RL', 'nodes': [node.value, node.right.value, node.right.left.value]}
-                break
+                        # RL型
+                        plan = {
+                            'type': 'RL',
+                            'nodes': [
+                                node.value,
+                                node.right.value if node.right else None,
+                                node.right.left.value if (node.right and node.right.left) else None
+                            ]
+                        }
+                break  # 只处理第一个失衡节点
+        
         return plan
 
     def _get_height(self, node):
