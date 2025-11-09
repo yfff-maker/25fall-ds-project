@@ -269,8 +269,20 @@ class LinkedListModel(BaseStructure):
         if not self.active or position < 0 or position >= len(self.data):
             return
         
-        # 使用 CustomList 的 delete 方法
-        self.data.delete(position)
+        # 设置删除动画状态
+        self._animation_state = 'deleting'
+        self._animation_progress = 0.0
+        self._delete_position = position
+        
+        # 取出将要删除的值（仅用于渲染时高亮/占位）
+        cur = self.data.head
+        idx = 0
+        while cur and idx < position:
+            cur = cur.next
+            idx += 1
+        self._deleted_value = cur.val if cur else None
+        
+        # 这里先不执行 self.data.delete(position)，等动画完成后再执行
     
     def insert_at_end(self, value):
         """在末尾插入元素（别名方法）"""
@@ -304,6 +316,17 @@ class LinkedListModel(BaseStructure):
             self.data.insert(index, value)
             
             self._animation_state = None
+    
+    def complete_delete_animation(self):
+        """完成删除动画"""
+        if self._animation_state == 'deleting':
+            pos = getattr(self, '_delete_position', -1)
+            if pos >= 0:
+                self.data.delete(pos)
+            self._animation_state = None
+            self._animation_progress = 0.0
+            self._delete_position = 0
+            self._deleted_value = None
     
     # ===== 序列化 =====
     def to_dict(self) -> dict:

@@ -369,6 +369,10 @@ class LinkedListAdapter:
         animation_state = getattr(linked_list, '_animation_state', None)
         animation_progress = getattr(linked_list, '_animation_progress', 0.0)
         
+        # 补充取删除参数
+        delete_position = getattr(linked_list, '_delete_position', -1) if animation_state == 'deleting' else -1
+        is_deleting = animation_state == 'deleting'
+        
         # 生成节点和边快照
         current = linked_list.data.head  # 访问CustomList的head
         i = 0
@@ -378,42 +382,46 @@ class LinkedListAdapter:
         insert_position = getattr(linked_list, '_insert_position', -1)
         is_inserting = animation_state == 'inserting'
         
+        # 定义删除场景的 X 计算（前移）
+        def _node_x_delete(idx: int) -> float:
+            base_x = start_x + idx * node_spacing
+            if is_deleting and delete_position >= 0 and idx > delete_position:
+                # 0.4~0.8 匀速左移一个间距
+                t = 0.0
+                if animation_progress > 0.4:
+                    t = min((animation_progress - 0.4) / 0.4, 1.0)
+                return base_x - t * node_spacing
+            return base_x
+        
+        # 为插入动画添加最终阶段的右移插值
+        def _node_x(idx: int) -> float:
+            base_x = start_x + idx * node_spacing
+            if is_inserting and idx > insert_position:
+                if animation_progress < 0.8:
+                    return base_x
+                t = (animation_progress - 0.8) / 0.2
+                if t < 0.0:
+                    t = 0.0
+                elif t > 1.0:
+                    t = 1.0
+                return base_x + t * node_spacing
+            return base_x
+        
         while current:
+            # 跳过绘制 q（>=0.4 阶段）
+            if is_deleting and delete_position == i and animation_progress >= 0.4:
+                # 跳过绘制要删除的节点 q
+                current = current.next
+                i += 1
+                continue
+            
             node_id = f"node_{i}"
             
             # 计算节点位置
-            if is_inserting and i > insert_position:
-                # 插入动画中，后续节点需要向右移动
-                node_x = start_x + (i + 1) * node_spacing
+            if is_deleting:
+                node_x = _node_x_delete(i)
             else:
-                # 正常位置
-                node_x = start_x + i * node_spacing
-            
-<<<<<<< HEAD
-
-=======
-<<<<<<< HEAD
-=======
->>>>>>> 3f0f665337194c7214c1c415673bb092534885a8
-            # 为插入动画添加最终阶段的右移插值
-            def _node_x(idx: int) -> float:
-                base_x = start_x + idx * node_spacing
-                if is_inserting and idx > insert_position:
-                    if animation_progress < 0.8:
-                        return base_x
-                    t = (animation_progress - 0.8) / 0.2
-                    if t < 0.0:
-                        t = 0.0
-                    elif t > 1.0:
-                        t = 1.0
-                    return base_x + t * node_spacing
-                return base_x
-            node_x = _node_x(i)
-<<<<<<< HEAD
-
-=======
->>>>>>> 850eabb (（这里填写每一次修改了什么）)
->>>>>>> 3f0f665337194c7214c1c415673bb092534885a8
+                node_x = _node_x(i)
             node_width = 80  # 节点宽度
             node_height = 40  # 节点高度
             
@@ -485,60 +493,95 @@ class LinkedListAdapter:
             
             # 添加箭头到下一个节点（连接线）
             if prev_node_id:
-<<<<<<< HEAD
-                # 抹去 q→p：当 i 是插入位置 p，且进度>0.4 时不画 q→p
-                if not (is_inserting and i == insert_position and animation_progress > 0.4):
+                if is_deleting:
+                    # 抹去 p→q：当前 i==delete_position 时不画这条直线
+                    if i == delete_position:
+                        pass  # 不生成 edge
+                    # 抹去弧线阶段的直线 p→succ（0.2~0.8 用弧线替代）
+                    elif i == delete_position + 1 and 0.2 <= animation_progress < 0.8:
+                        pass  # 不生成 edge
+                    else:
+                        # 正常生成直线
+                        edge = EdgeSnapshot(
+                            from_id=f"{prev_node_id}_box",
+                            to_id=f"{node_id}_box",
+                            arrow_type="arrow"
+                        )
+                        prev_x = _node_x_delete(i - 1)
+                        edge.from_x = prev_x + node_width
+                        edge.from_y = y + node_height // 2
+                        edge.to_x = node_x
+                        edge.to_y = y + node_height // 2
+                        snapshot.edges.append(edge)
+                else:
+                    # 非删除动画，按原逻辑生成
                     edge = EdgeSnapshot(
                         from_id=f"{prev_node_id}_box",
                         to_id=f"{node_id}_box",
                         arrow_type="arrow"
                     )
-                    # 若已实现整体右移插值，优先用 _node_x(i-1)
-                    try:
-                        prev_x = _node_x(i - 1)
-                    except NameError:
-                        prev_x = start_x + (i - 1) * node_spacing
-                    edge.from_x = prev_x + node_width
+                    # 覆盖from_x以在末段插值移动前驱位置
+                    if is_inserting and i - 1 > insert_position:
+                        prev_x_interp = _node_x(i - 1)
+                        edge.from_x = prev_x_interp + node_width
+                    else:
+                        prev_x = _node_x(i - 1) if is_inserting else start_x + (i - 1) * node_spacing
+                        edge.from_x = prev_x + node_width
                     edge.from_y = y + node_height // 2
                     edge.to_x = node_x
                     edge.to_y = y + node_height // 2
                     snapshot.edges.append(edge)
-
-=======
-                edge = EdgeSnapshot(
-                    from_id=f"{prev_node_id}_box",
-                    to_id=f"{node_id}_box",
-                    arrow_type="arrow"
-                )
-                # 添加坐标信息用于渲染
-                if is_inserting and i - 1 > insert_position:
-                    # 前一个节点也向右移动了
-                    edge.from_x = start_x + i * node_spacing + node_width
-                else:
-                    edge.from_x = start_x + (i - 1) * node_spacing + node_width
-                edge.from_y = y + node_height // 2
-<<<<<<< HEAD
-                edge.to_x = node_x
-                edge.to_y = y + node_height // 2
-                snapshot.edges.append(edge)
-=======
-                # 覆盖from_x以在末段插值移动前驱位置
-                if is_inserting and i - 1 > insert_position:
-                    prev_x_interp = _node_x(i - 1)
-                    edge.from_x = prev_x_interp + node_width
-                edge.to_x = node_x
-                edge.to_y = y + node_height // 2
-                snapshot.edges.append(edge)
-                # 在“断开原连接”阶段之后，移除刚刚添加的前驱→后继边
-                if is_inserting and i == insert_position and animation_progress > 0.4:
-                    if snapshot.edges:
-                        snapshot.edges.pop()
->>>>>>> 850eabb (（这里填写每一次修改了什么）)
->>>>>>> 3f0f665337194c7214c1c415673bb092534885a8
+                    # 在"断开原连接"阶段之后，移除刚刚添加的前驱→后继边
+                    if is_inserting and i == insert_position and animation_progress > 0.4:
+                        if snapshot.edges:
+                            snapshot.edges.pop()
             
             prev_node_id = node_id
             current = current.next  # CustomList使用next属性
             i += 1
+        
+        # 在循环之后，专门"画出弧线/最后的直线替换"
+        if is_deleting:
+            p_idx = delete_position - 1
+            succ_idx = delete_position + 1
+            # 确保 p 与 succ 存在（succ 可能不存在于尾删）
+            list_len = linked_list.size()
+            if p_idx >= 0 and succ_idx < list_len:
+                node_width = 80
+                node_height = 40
+                # 端点（与直线一致）：p 的右侧中心 -> succ 的左侧中心
+                p_right_x = _node_x_delete(p_idx) + node_width
+                succ_left_x = _node_x_delete(succ_idx)
+                p_center_y = y + node_height // 2
+                succ_center_y = y + node_height // 2
+                
+                if animation_progress >= 0.8:
+                    # 阶段 4：弧线改回直线
+                    edge = EdgeSnapshot(from_id="", to_id="", arrow_type="arrow")
+                    edge.from_x = p_right_x
+                    edge.from_y = p_center_y
+                    edge.to_x = succ_left_x
+                    edge.to_y = succ_center_y
+                    edge.color = "#000000"
+                    snapshot.edges.append(edge)
+                elif animation_progress >= 0.2:
+                    # 阶段 2-3：用两段折线模拟弧线 p→mid→succ（mid 在节点上方）
+                    mid_x = (p_right_x + succ_left_x) / 2
+                    mid_y = y - 60  # 弧线高度，可按需微调
+                    e1 = EdgeSnapshot(from_id="", to_id="", arrow_type="arrow")
+                    e1.from_x = p_right_x
+                    e1.from_y = p_center_y
+                    e1.to_x = mid_x
+                    e1.to_y = mid_y
+                    e1.color = "#FF8C00"  # 橙色，表示过渡
+                    snapshot.edges.append(e1)
+                    e2 = EdgeSnapshot(from_id="", to_id="", arrow_type="arrow")
+                    e2.from_x = mid_x
+                    e2.from_y = mid_y
+                    e2.to_x = succ_left_x
+                    e2.to_y = succ_center_y
+                    e2.color = "#FF8C00"
+                    snapshot.edges.append(e2)
         
         # 处理构建动画
         if animation_state == 'building':
@@ -694,44 +737,12 @@ class LinkedListAdapter:
             insert_position = getattr(linked_list, '_insert_position', 0)
             
             if new_value is not None:
-<<<<<<< HEAD
-=======
                 # 计算新节点的位置（先在上方，然后移动到目标位置）
-                if animation_progress < 0.2:
-                    # 新节点还在上方
-                    new_x = start_x + insert_position * node_spacing
-                    new_y = y - 100
-                else:
-                    # 新节点移动到目标位置
-                    new_x = start_x + insert_position * node_spacing
-                    new_y = y
-<<<<<<< HEAD
-=======
-                # 调整新节点Y坐标：浮入悬停→末段下落归位
-                hover_y = y - 40
-                if animation_progress < 0.2:
-                    start_y = y - 100
-                    k = animation_progress / 0.2
-                    new_y = start_y + (hover_y - start_y) * k
-                elif animation_progress < 0.8:
-                    new_y = hover_y
-                else:
-                    k = (animation_progress - 0.8) / 0.2
-                    if k < 0.0:
-                        k = 0.0
-                    elif k > 1.0:
-                        k = 1.0
-                    new_y = hover_y + (y - hover_y) * k
->>>>>>> 850eabb (（这里填写每一次修改了什么）)
-                
->>>>>>> 3f0f665337194c7214c1c415673bb092534885a8
                 node_width = 80
                 node_height = 40
-                
-                # 计算新节点的位置
                 new_x = start_x + insert_position * node_spacing
                 
-                # 悬浮高度：建议至少 80px，也可用节点高度倍数
+                # 调整新节点Y坐标：浮入悬停→末段下落归位
                 hover_offset = max(80, int(node_height * 2))
                 hover_y = y - hover_offset
                 
@@ -836,15 +847,6 @@ class LinkedListAdapter:
                         )
                         edge.from_x = new_x + node_width
                         edge.from_y = new_y + node_height // 2
-<<<<<<< HEAD
-
-                        edge.to_x = start_x + insert_position * node_spacing
-
-=======
-<<<<<<< HEAD
-                        edge.to_x = start_x + insert_position * node_spacing
-=======
->>>>>>> 3f0f665337194c7214c1c415673bb092534885a8
                         # 后继节点在末段右移，按进度插值其X坐标
                         base_succ_x = start_x + insert_position * node_spacing
                         if animation_progress < 0.8:
@@ -857,11 +859,6 @@ class LinkedListAdapter:
                                 t = 1.0
                             succ_x = base_succ_x + t * node_spacing
                         edge.to_x = succ_x
-<<<<<<< HEAD
-
-=======
->>>>>>> 850eabb (（这里填写每一次修改了什么）)
->>>>>>> 3f0f665337194c7214c1c415673bb092534885a8
                         edge.to_y = y + node_height // 2
                         snapshot.edges.append(edge)
                 
@@ -2017,31 +2014,498 @@ class HuffmanTreeAdapter:
     """哈夫曼树适配器 - 支持构建动画"""
     
     @staticmethod
-    def to_snapshot(huffman_tree, start_x=640, y=200, level_height=120, node_spacing=200) -> StructureSnapshot:
-        """将哈夫曼树转换为快照 - 支持构建动画"""
+    def to_snapshot(huffman, start_x=100, y=220, spacing=130,
+                    merge_cx=600, merge_cy=180,
+                    box_w=90, box_h=46) -> StructureSnapshot:
+        """将哈夫曼树转换为快照 - 横向队列布局 + 合并动画"""
         snapshot = StructureSnapshot()
+        snapshot.hint_text = "哈夫曼树（横向队列 + 合并动画）"
         
-        # 获取动画状态
-        animation_state = getattr(huffman_tree, '_animation_state', None)
-        animation_progress = getattr(huffman_tree, '_animation_progress', 0.0)
-        build_step = getattr(huffman_tree, '_build_step', 0)
-        freq_map = getattr(huffman_tree, '_original_freq_map', {})
+        # 取动画状态
+        state = getattr(huffman, '_animation_state', None)
+        progress = getattr(huffman, '_animation_progress', 0.0)
+        current_merge = getattr(huffman, '_current_merge_nodes', []) or []
+        merged_nodes = set(getattr(huffman, '_merged_nodes', []) or [])
         
-        if animation_state == 'building' and freq_map:
-            # 显示构建动画
-            snapshot = HuffmanTreeAdapter._create_building_animation_snapshot(
-                huffman_tree, freq_map, build_step, animation_progress, start_x, y, level_height
+        # 取队列（优先用 queue/_queue；否则用 leaves 兜底）
+        queue = None
+        for name in ('queue', '_queue', '_current_queue'):
+            if hasattr(huffman, name):
+                q = getattr(huffman, name)
+                if q:
+                    queue = list(q)
+                    break
+        
+        if queue is None:
+            leaves = []
+            if hasattr(huffman, 'leaves') and huffman.leaves:
+                leaves = list(huffman.leaves)
+            elif hasattr(huffman, 'get_leaves'):
+                try:
+                    leaves = list(huffman.get_leaves())
+                except Exception:
+                    leaves = []
+            # 如果还是没有，尝试从原始频率映射构建
+            if not leaves:
+                freq_map = getattr(huffman, '_original_freq_map', {})
+                if freq_map:
+                    queue = [(char, freq) for char, freq in freq_map.items()]
+                else:
+                    queue = []
+            else:
+                queue = leaves
+        
+        if not queue:
+            # 如果队列为空但已有根节点，显示完整树（使用中序横向、层级纵向布局）
+            root = getattr(huffman, 'root', None)
+            if root:
+                # 1) 中序遍历为每个节点分配横向序号（xIndex），纵向按深度（level）分层
+                positions = {}  # node -> (xIndex, level)
+                x_counter = 0
+                
+                def assign_positions(node, level=0):
+                    nonlocal x_counter
+                    if not node:
+                        return
+                    assign_positions(getattr(node, 'left', None), level + 1)
+                    positions[node] = (x_counter, level)
+                    x_counter += 1
+                    assign_positions(getattr(node, 'right', None), level + 1)
+                
+                assign_positions(root, 0)
+                
+                if positions:
+                    # 2) 把 xIndex/level 转换为像素坐标（类似 BST 的形状）
+                    x_step = 110   # 横向间距
+                    y_step = 90    # 纵向层距
+                    base_x = merge_cx + 200
+                    base_y = y - 140
+                    
+                    # 3) 先画边（父→子），再画节点框
+                    def pix(node):
+                        xi, lv = positions[node]
+                        return base_x + xi * x_step, base_y + lv * y_step
+                    
+                    for node, (xi, lv) in positions.items():
+                        x0, y0 = pix(node)
+                        # 左子
+                        if getattr(node, 'left', None):
+                            xl, yl = pix(node.left)
+                            e = EdgeSnapshot(from_id="", to_id="", arrow_type="arrow")
+                            e.from_x, e.from_y = x0, y0
+                            e.to_x,   e.to_y   = xl, yl
+                            e.color = "#1f77b4"  # 左 0：蓝
+                            snapshot.edges.append(e)
+                        # 右子
+                        if getattr(node, 'right', None):
+                            xr, yr = pix(node.right)
+                            e = EdgeSnapshot(from_id="", to_id="", arrow_type="arrow")
+                            e.from_x, e.from_y = x0, y0
+                            e.to_x,   e.to_y   = xr, yr
+                            e.color = "#d62728"  # 右 1：红
+                            snapshot.edges.append(e)
+                    
+                    # 4) 画节点框（根节点高亮）
+                    for node, (xi, lv) in positions.items():
+                        x0, y0 = pix(node)
+                        nid = f"t_{id(node)}"
+                        val = getattr(node, 'char', None) or "*"
+                        freq = getattr(node, 'freq', 0)
+                        color = "#90EE90" if node == root else "#E8F4FD"
+                        box = BoxSnapshot(
+                            id=f"{nid}_box",
+                            value=f"{val}\n{freq}%",
+                            x=x0 - 40, y=y0 - 20,
+                            width=80, height=40,
+                            color=color
+                        )
+                        snapshot.boxes.append(box)
+            return snapshot
+        
+        # 辅助：获取 id、字符与频率、是否子树
+        def get_char(item):
+            if isinstance(item, (tuple, list)) and len(item) >= 2:
+                return str(item[0])
+            return getattr(item, 'char', None)
+        
+        def get_freq(item):
+            if isinstance(item, (tuple, list)) and len(item) >= 2:
+                return item[1]
+            return getattr(item, 'freq', 0)
+        
+        def is_tree(item):
+            return hasattr(item, 'left') or hasattr(item, 'right')
+        
+        def item_id(item):
+            ch = get_char(item)
+            if ch not in (None, "", "*"):
+                return f"leaf_{ch}"
+            return f"node_{id(item)}"
+        
+        # 选中集合（当前合并的两项，可能是叶子也可能是子树）
+        selected_ids = set()
+        for it in current_merge:
+            # 兼容传 id / 传对象 / 传字符
+            if isinstance(it, (tuple, list)) or hasattr(it, 'freq'):
+                selected_ids.add(item_id(it))
+            else:
+                selected_ids.add(f"leaf_{it}")  # 假定字符
+        
+        # 队列横向排布
+        def queue_pos(i):
+            return start_x + i * spacing, y
+        
+        # 画方框（字符+频率）
+        def draw_box(id_key, label, freq, x, yy, color="#E8F4FD", text_color="#000", scale=1.0):
+            bw = int(box_w * scale); bh = int(box_h * scale)
+            box = BoxSnapshot(
+                id=f"hf_{id_key}",
+                value=f"{label}\n{freq}%",
+                x=x - bw // 2, y=yy - bh // 2,
+                width=bw, height=bh,
+                color=color, text_color=text_color
             )
-        elif huffman_tree.root:
-            # 显示完整树
-            snapshot = HuffmanTreeAdapter._create_complete_tree_snapshot(
-                huffman_tree, start_x, y, level_height, node_spacing
-            )
-        else:
-            # 显示初始状态
-            snapshot.hint_text = "哈夫曼树 (点击构建开始)"
+            snapshot.boxes.append(box)
+            return box
+        
+        # 画折线模拟弧线（p->mid->q）
+        def draw_arc(x1, y1, x2, y2, color="#FF8C00", lift=60):
+            mid_x = (x1 + x2) / 2
+            mid_y = min(y1, y2) - abs(lift)
+            e1 = EdgeSnapshot(from_id="", to_id="", arrow_type="arrow")
+            e1.from_x, e1.from_y = x1, y1
+            e1.to_x,   e1.to_y   = mid_x, mid_y
+            e1.color = color
+            snapshot.edges.append(e1)
+            e2 = EdgeSnapshot(from_id="", to_id="", arrow_type="arrow")
+            e2.from_x, e2.from_y = mid_x, mid_y
+            e2.to_x,   e2.to_y   = x2, y2
+            e2.color = color
+            snapshot.edges.append(e2)
+        
+        # 为子树分配紧凑坐标（中序+层级）
+        def assign_positions_compact(node):
+            positions = {}  # node -> (xIndex, level)
+            x_counter = 0
+            def dfs(nd, lv):
+                nonlocal x_counter
+                if not nd:
+                    return
+                dfs(getattr(nd, 'left', None), lv+1)
+                positions[nd] = (x_counter, lv)
+                x_counter += 1
+                dfs(getattr(nd, 'right', None), lv+1)
+            dfs(node, 0)
+            return positions
+        
+        # 将一棵子树以紧凑树形绘制在 (cx, cy) 附近（小比例）
+        def draw_compact_tree(node, cx, cy, scale=0.8, x_step=44, y_step=50):
+            if not node:
+                return
+            pos = assign_positions_compact(node)
+            # 计算像素点
+            def pix(nd):
+                xi, lv = pos[nd]
+                x = cx + int((xi - len(pos)/2) * x_step * scale)
+                y = cy + int(lv * y_step * scale)
+                return x, y
+            # 先画边
+            for nd in pos.keys():
+                x0, y0 = pix(nd)
+                if getattr(nd, 'left', None):
+                    xl, yl = pix(nd.left)
+                    e = EdgeSnapshot(from_id="", to_id="", arrow_type="arrow")
+                    e.from_x, e.from_y = x0, y0
+                    e.to_x,   e.to_y   = xl, yl
+                    e.color = "#1f77b4"  # 左 0
+                    snapshot.edges.append(e)
+                if getattr(nd, 'right', None):
+                    xr, yr = pix(nd.right)
+                    e = EdgeSnapshot(from_id="", to_id="", arrow_type="arrow")
+                    e.from_x, e.from_y = x0, y0
+                    e.to_x,   e.to_y   = xr, yr
+                    e.color = "#d62728"  # 右 1
+                    snapshot.edges.append(e)
+            # 再画小框
+            bw = int(80 * 0.6 * scale); bh = int(40 * 0.6 * scale)
+            for nd in pos.keys():
+                x0, y0 = pix(nd)
+                nid = f"mini_{id(nd)}"
+                val = getattr(nd, 'char', None) or "*"
+                freq = getattr(nd, 'freq', 0)
+                box = BoxSnapshot(
+                    id=f"{nid}_box",
+                    value=f"{val}\n{freq}%",
+                    x=x0 - bw//2, y=y0 - bh//2,
+                    width=bw, height=bh,
+                    color="#E8F4FD"
+                )
+                snapshot.boxes.append(box)
+        
+        def lerp(a, b, t):
+            return a + (b - a) * t
+        
+        # 预计算队列排布
+        layout = []  # [(it, id, label, freq, qx, qy), ...]
+        for i, it in enumerate(queue):
+            iid = item_id(it)
+            ch = get_char(it)
+            freq = get_freq(it)
+            label = ch if ch not in (None, "", "*") else "*"
+            qx, qy = queue_pos(i)
+            layout.append((it, iid, label, freq, qx, qy))
+        
+        # 找到被选中两项（按频率排序，决定回队列的中间位置）
+        selected = [t for t in layout if t[1] in selected_ids]
+        selected = sorted(selected, key=lambda x: x[3])[:2] if selected else []
+        
+        # 默认回队列位置：两者中点
+        mid_x = None
+        if len(selected) == 2:
+            ax0, ay0 = selected[0][4], selected[0][5]
+            bx0, by0 = selected[1][4], selected[1][5]
+            mid_x = (ax0 + bx0) / 2
+        
+        # 1) 先画队列中所有未选中的项
+        for it, iid, label, freq, qx, qy in layout:
+            if iid in selected_ids:
+                continue
+            # 被合并过的旧项（如果结构标记了 merged_nodes）显示淡灰
+            if is_tree(it):
+                # 子树以紧凑树形显示
+                draw_compact_tree(it, qx, qy - 6, scale=0.85)
+            else:
+                if hasattr(huffman, '_merged_nodes') and iid in merged_nodes:
+                    draw_box(iid, label, freq, qx, qy, color="#EEEEEE", text_color="#888")
+                else:
+                    draw_box(iid, label, freq, qx, qy, color="#E8F4FD")
+        
+        # 2) 对被选中两项做动画
+        if len(selected) == 2:
+            (itA, idA, labelA, freqA, ax0, ay0), (itB, idB, labelB, freqB, bx0, by0) = selected
+            
+            # 0.00–0.20 高亮队列中的两个
+            if progress < 0.20:
+                # A
+                if is_tree(itA):
+                    draw_compact_tree(itA, ax0, ay0 - 6, scale=0.85)
+                else:
+                    draw_box(idA, labelA, freqA, ax0, ay0, color="#FFD166")
+                # B
+                if is_tree(itB):
+                    draw_compact_tree(itB, bx0, by0 - 6, scale=0.85)
+                else:
+                    draw_box(idB, labelB, freqB, bx0, by0, color="#F58518")
+                if not hasattr(snapshot, 'step_details') or snapshot.step_details is None:
+                    snapshot.step_details = []
+                snapshot.step_details.append("选择最小两个节点（高亮）")
+            
+            # 0.20–0.45 漂移到合并区
+            elif progress < 0.45:
+                t = (progress - 0.20) / 0.25
+                ax = lerp(ax0, merge_cx - 70, t); ay = lerp(ay0, merge_cy, t)
+                bx = lerp(bx0, merge_cx + 70, t); by = lerp(by0, merge_cy, t)
+                # A
+                if is_tree(itA):
+                    draw_compact_tree(itA, ax, ay, scale=0.9)
+                else:
+                    draw_box(idA, labelA, freqA, ax, ay, color="#FFD166")
+                # B
+                if is_tree(itB):
+                    draw_compact_tree(itB, bx, by, scale=0.9)
+                else:
+                    draw_box(idB, labelB, freqB, bx, by, color="#F58518")
+                draw_arc(ax0, ay0, ax, ay, color="#F58518", lift=40)
+                draw_arc(bx0, by0, bx, by, color="#F58518", lift=40)
+                if not hasattr(snapshot, 'step_details') or snapshot.step_details is None:
+                    snapshot.step_details = []
+                snapshot.step_details.append("漂移到合并区域")
+            
+            # 0.45–0.60 融合 + 父节点出现（绿色）+ 父→子连线
+            elif progress < 0.60:
+                t = (progress - 0.45) / 0.15
+                ax = merge_cx - 70; ay = merge_cy
+                bx = merge_cx + 70; by = merge_cy
+                scale = max(0.5, 1.0 - 0.6 * t)
+                # 两子树在中心缩小
+                if is_tree(itA):
+                    draw_compact_tree(itA, ax, ay, scale=scale)
+                else:
+                    draw_box(idA, labelA, freqA, ax, ay, color="#FFD166", scale=scale)
+                if is_tree(itB):
+                    draw_compact_tree(itB, bx, by, scale=scale)
+                else:
+                    draw_box(idB, labelB, freqB, bx, by, color="#F58518", scale=scale)
+                
+                # 父节点（仅渲染用）
+                try:
+                    pfreq = (int(freqA) if str(freqA).isdigit() else freqA) + \
+                            (int(freqB) if str(freqB).isdigit() else freqB)
+                except (ValueError, TypeError):
+                    pfreq = freqA + freqB
+                # 父->子连线（连接到两棵子树的根）
+                draw_box("par_tmp", f"{labelA}+{labelB}", pfreq, merge_cx, merge_cy, color="#4ECDC4")
+                # 父→A根
+                eL = EdgeSnapshot(from_id="", to_id="", arrow_type="arrow")
+                eL.from_x, eL.from_y = merge_cx, merge_cy
+                eL.to_x,   eL.to_y   = ax, ay
+                eL.color = "#1f77b4"  # 左 0
+                snapshot.edges.append(eL)
+                # 父→B根
+                eR = EdgeSnapshot(from_id="", to_id="", arrow_type="arrow")
+                eR.from_x, eR.from_y = merge_cx, merge_cy
+                eR.to_x,   eR.to_y   = bx, by
+                eR.color = "#d62728"  # 右 1
+                snapshot.edges.append(eR)
+                
+                if not hasattr(snapshot, 'step_details') or snapshot.step_details is None:
+                    snapshot.step_details = []
+                snapshot.step_details.append("融合生成新节点")
+            
+            # 0.60–0.80 父节点回到队列中点，旧两项淡出
+            elif progress < 0.80:
+                t = (progress - 0.60) / 0.20
+                # 父节点作为"新树根"回队列中点
+                rx = lerp(merge_cx, mid_x if mid_x is not None else merge_cx, t)
+                ry = lerp(merge_cy, y, t)
+                # 将两棵子树作为左右孩子临时绘制成一棵新小树（仅渲染不改结构）
+                class _Pair(object):
+                    pass
+                parent = _Pair()
+                parent.char = "*"
+                try:
+                    parent.freq = (int(freqA) if str(freqA).isdigit() else freqA) + \
+                                  (int(freqB) if str(freqB).isdigit() else freqB)
+                except (ValueError, TypeError):
+                    parent.freq = freqA + freqB
+                parent.left = itA
+                parent.right = itB
+                draw_compact_tree(parent, rx, ry, scale=0.9)
+                
+                # 旧位置两项可淡灰（历史痕迹）
+                if not is_tree(itA):
+                    draw_box(idA, labelA, freqA, ax0, ay0, color="#EEEEEE", text_color="#888")
+                if not is_tree(itB):
+                    draw_box(idB, labelB, freqB, bx0, by0, color="#EEEEEE", text_color="#888")
+                
+                if not hasattr(snapshot, 'step_details') or snapshot.step_details is None:
+                    snapshot.step_details = []
+                snapshot.step_details.append("新节点回到队列")
+            
+            # 0.80–1.00 等下一轮（队列静态，父节点已就位）
+            else:
+                if not hasattr(snapshot, 'step_details') or snapshot.step_details is None:
+                    snapshot.step_details = []
+                snapshot.step_details.append("等待下一轮合并")
+        
+        # 若已存在根，则（接近完成时）在右侧绘整棵树并突出根
+        root = getattr(huffman, 'root', None)
+        if root and (state in (None, "done", "huffman_done") or progress >= 0.95):
+            # 1) 中序遍历为每个节点分配横向序号（xIndex），纵向按深度（level）分层
+            positions = {}  # node -> (xIndex, level)
+            x_counter = 0
+            
+            def assign_positions(node, level=0):
+                nonlocal x_counter
+                if not node:
+                    return
+                assign_positions(getattr(node, 'left', None), level + 1)
+                positions[node] = (x_counter, level)
+                x_counter += 1
+                assign_positions(getattr(node, 'right', None), level + 1)
+            
+            assign_positions(root, 0)
+            
+            if positions:
+                # 2) 把 xIndex/level 转换为像素坐标（类似 BST 的形状）
+                x_step = 110   # 横向间距（可按画布宽调整）
+                y_step = 90    # 纵向层距
+                # 让整个树整体偏右一些（避免和队列重叠）
+                # 你也可以把 base_x 设为画布中点，或根据节点总数动态居中
+                base_x = merge_cx + 200
+                base_y = y - 140
+                
+                # 3) 先画边（父→子），再画节点框
+                def pix(node):
+                    xi, lv = positions[node]
+                    return base_x + xi * x_step, base_y + lv * y_step
+                
+                for node, (xi, lv) in positions.items():
+                    x0, y0 = pix(node)
+                    # 左子
+                    if getattr(node, 'left', None):
+                        xl, yl = pix(node.left)
+                        e = EdgeSnapshot(from_id="", to_id="", arrow_type="arrow")
+                        e.from_x, e.from_y = x0, y0
+                        e.to_x,   e.to_y   = xl, yl
+                        e.color = "#1f77b4"  # 左 0：蓝
+                        snapshot.edges.append(e)
+                    # 右子
+                    if getattr(node, 'right', None):
+                        xr, yr = pix(node.right)
+                        e = EdgeSnapshot(from_id="", to_id="", arrow_type="arrow")
+                        e.from_x, e.from_y = x0, y0
+                        e.to_x,   e.to_y   = xr, yr
+                        e.color = "#d62728"  # 右 1：红
+                        snapshot.edges.append(e)
+                
+                # 4) 画节点框（根节点高亮）
+                for node, (xi, lv) in positions.items():
+                    x0, y0 = pix(node)
+                    nid = f"t_{id(node)}"
+                    val = getattr(node, 'char', None) or "*"
+                    freq = getattr(node, 'freq', 0)
+                    color = "#90EE90" if node == root else "#E8F4FD"
+                    box = BoxSnapshot(
+                        id=f"{nid}_box",
+                        value=f"{val}\n{freq}%",
+                        x=x0 - 40, y=y0 - 20,
+                        width=80, height=40,
+                        color=color
+                    )
+                    snapshot.boxes.append(box)
+            
+            if not hasattr(snapshot, 'step_details') or snapshot.step_details is None:
+                snapshot.step_details = []
+            snapshot.step_details.append("最终树已形成：中序横向、层级纵向布局")
+        
+        # 操作历史
+        if hasattr(huffman, '_operation_history') and huffman._operation_history:
+            snapshot.operation_history = list(huffman._operation_history)
         
         return snapshot
+    
+    @staticmethod
+    def _draw_final_tree(node, snapshot, x, yy, dx=150, dy=80, root_node=None):
+        """绘制最终树结构"""
+        if not node:
+            return
+        
+        # 第一次调用时，root_node 就是传入的 node
+        if root_node is None:
+            root_node = node
+        
+        nid = f"t_{id(node)}"
+        val = getattr(node, 'char', None) or "*"
+        freq = getattr(node, 'freq', 0)
+        color = "#90EE90" if node == root_node else "#E8F4FD"
+        
+        box = BoxSnapshot(id=f"{nid}_box", value=f"{val}\n{freq}%", x=x-40, y=yy-20, width=80, height=40, color=color)
+        snapshot.boxes.append(box)
+        
+        if getattr(node, 'left', None):
+            lx, ly = x - dx, yy + dy
+            e = EdgeSnapshot(from_id=f"{nid}_box", to_id=f"t_{id(node.left)}_box", arrow_type="arrow")
+            e.from_x, e.from_y = x, yy; e.to_x, e.to_y = lx, ly; e.color = "#1f77b4"
+            snapshot.edges.append(e)
+            HuffmanTreeAdapter._draw_final_tree(node.left, snapshot, lx, ly, dx=int(dx*0.75), dy=dy, root_node=root_node)
+        
+        if getattr(node, 'right', None):
+            rx, ry = x + dx, yy + dy
+            e = EdgeSnapshot(from_id=f"{nid}_box", to_id=f"t_{id(node.right)}_box", arrow_type="arrow")
+            e.from_x, e.from_y = x, yy; e.to_x, e.to_y = rx, ry; e.color = "#d62728"
+            snapshot.edges.append(e)
+            HuffmanTreeAdapter._draw_final_tree(node.right, snapshot, rx, ry, dx=int(dx*0.75), dy=dy, root_node=root_node)
     
     @staticmethod
     def _create_building_animation_snapshot(huffman_tree, freq_map, build_step, progress, start_x, y, level_height):
