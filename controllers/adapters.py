@@ -389,7 +389,12 @@ class LinkedListAdapter:
                 # 正常位置
                 node_x = start_x + i * node_spacing
             
+<<<<<<< HEAD
 
+=======
+<<<<<<< HEAD
+=======
+>>>>>>> 3f0f665337194c7214c1c415673bb092534885a8
             # 为插入动画添加最终阶段的右移插值
             def _node_x(idx: int) -> float:
                 base_x = start_x + idx * node_spacing
@@ -404,7 +409,11 @@ class LinkedListAdapter:
                     return base_x + t * node_spacing
                 return base_x
             node_x = _node_x(i)
+<<<<<<< HEAD
 
+=======
+>>>>>>> 850eabb (（这里填写每一次修改了什么）)
+>>>>>>> 3f0f665337194c7214c1c415673bb092534885a8
             node_width = 80  # 节点宽度
             node_height = 40  # 节点高度
             
@@ -476,6 +485,7 @@ class LinkedListAdapter:
             
             # 添加箭头到下一个节点（连接线）
             if prev_node_id:
+<<<<<<< HEAD
                 # 抹去 q→p：当 i 是插入位置 p，且进度>0.4 时不画 q→p
                 if not (is_inserting and i == insert_position and animation_progress > 0.4):
                     edge = EdgeSnapshot(
@@ -494,6 +504,37 @@ class LinkedListAdapter:
                     edge.to_y = y + node_height // 2
                     snapshot.edges.append(edge)
 
+=======
+                edge = EdgeSnapshot(
+                    from_id=f"{prev_node_id}_box",
+                    to_id=f"{node_id}_box",
+                    arrow_type="arrow"
+                )
+                # 添加坐标信息用于渲染
+                if is_inserting and i - 1 > insert_position:
+                    # 前一个节点也向右移动了
+                    edge.from_x = start_x + i * node_spacing + node_width
+                else:
+                    edge.from_x = start_x + (i - 1) * node_spacing + node_width
+                edge.from_y = y + node_height // 2
+<<<<<<< HEAD
+                edge.to_x = node_x
+                edge.to_y = y + node_height // 2
+                snapshot.edges.append(edge)
+=======
+                # 覆盖from_x以在末段插值移动前驱位置
+                if is_inserting and i - 1 > insert_position:
+                    prev_x_interp = _node_x(i - 1)
+                    edge.from_x = prev_x_interp + node_width
+                edge.to_x = node_x
+                edge.to_y = y + node_height // 2
+                snapshot.edges.append(edge)
+                # 在“断开原连接”阶段之后，移除刚刚添加的前驱→后继边
+                if is_inserting and i == insert_position and animation_progress > 0.4:
+                    if snapshot.edges:
+                        snapshot.edges.pop()
+>>>>>>> 850eabb (（这里填写每一次修改了什么）)
+>>>>>>> 3f0f665337194c7214c1c415673bb092534885a8
             
             prev_node_id = node_id
             current = current.next  # CustomList使用next属性
@@ -653,6 +694,37 @@ class LinkedListAdapter:
             insert_position = getattr(linked_list, '_insert_position', 0)
             
             if new_value is not None:
+<<<<<<< HEAD
+=======
+                # 计算新节点的位置（先在上方，然后移动到目标位置）
+                if animation_progress < 0.2:
+                    # 新节点还在上方
+                    new_x = start_x + insert_position * node_spacing
+                    new_y = y - 100
+                else:
+                    # 新节点移动到目标位置
+                    new_x = start_x + insert_position * node_spacing
+                    new_y = y
+<<<<<<< HEAD
+=======
+                # 调整新节点Y坐标：浮入悬停→末段下落归位
+                hover_y = y - 40
+                if animation_progress < 0.2:
+                    start_y = y - 100
+                    k = animation_progress / 0.2
+                    new_y = start_y + (hover_y - start_y) * k
+                elif animation_progress < 0.8:
+                    new_y = hover_y
+                else:
+                    k = (animation_progress - 0.8) / 0.2
+                    if k < 0.0:
+                        k = 0.0
+                    elif k > 1.0:
+                        k = 1.0
+                    new_y = hover_y + (y - hover_y) * k
+>>>>>>> 850eabb (（这里填写每一次修改了什么）)
+                
+>>>>>>> 3f0f665337194c7214c1c415673bb092534885a8
                 node_width = 80
                 node_height = 40
                 
@@ -764,9 +836,15 @@ class LinkedListAdapter:
                         )
                         edge.from_x = new_x + node_width
                         edge.from_y = new_y + node_height // 2
+<<<<<<< HEAD
 
                         edge.to_x = start_x + insert_position * node_spacing
 
+=======
+<<<<<<< HEAD
+                        edge.to_x = start_x + insert_position * node_spacing
+=======
+>>>>>>> 3f0f665337194c7214c1c415673bb092534885a8
                         # 后继节点在末段右移，按进度插值其X坐标
                         base_succ_x = start_x + insert_position * node_spacing
                         if animation_progress < 0.8:
@@ -779,7 +857,11 @@ class LinkedListAdapter:
                                 t = 1.0
                             succ_x = base_succ_x + t * node_spacing
                         edge.to_x = succ_x
+<<<<<<< HEAD
 
+=======
+>>>>>>> 850eabb (（这里填写每一次修改了什么）)
+>>>>>>> 3f0f665337194c7214c1c415673bb092534885a8
                         edge.to_y = y + node_height // 2
                         snapshot.edges.append(edge)
                 
