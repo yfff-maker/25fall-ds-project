@@ -543,11 +543,18 @@ class MainController(QObject):
     
     def _insert_next_avl_value(self):
         """插入AVL批量构建队列中的下一个值"""
-        if not self._avl_build_queue:
-            return
-        
-        next_value = self._avl_build_queue.pop(0)
-        self.insert_avl(next_value)
+        try:
+            if not self._avl_build_queue:
+                return
+            
+            next_value = self._avl_build_queue.pop(0)
+            self.insert_avl(next_value)
+        except Exception as e:
+            # 异常时继续处理队列，不中断批量构建
+            self._show_error("插入节点失败", str(e))
+            if self._avl_build_queue:
+                from PyQt5.QtCore import QTimer
+                QTimer.singleShot(100, self._insert_next_avl_value)
     
     def build_bst(self, values):
         """批量构建BST（自动顺序插入动画）"""
@@ -590,6 +597,15 @@ class MainController(QObject):
                 self._show_error("构建失败", "AVL结构不存在")
                 return
             
+            # 如果已有批量构建在进行，先停止并清理
+            if hasattr(self, '_animation_timer') and self._animation_timer is not None:
+                try:
+                    self._animation_timer.stop()
+                    self._animation_timer.deleteLater()
+                except:
+                    pass
+                self._animation_timer = None
+            
             # 初始化队列
             self._avl_build_queue = list(values) if isinstance(values, list) else [v.strip() for v in str(values).split(',') if v.strip()]
             
@@ -606,6 +622,14 @@ class MainController(QObject):
         except Exception as e:
             self._show_error("构建失败", str(e))
             self._avl_build_queue = []  # 清空队列
+            # 清理定时器
+            if hasattr(self, '_animation_timer') and self._animation_timer is not None:
+                try:
+                    self._animation_timer.stop()
+                    self._animation_timer.deleteLater()
+                except:
+                    pass
+                self._animation_timer = None
     
     def pop_stack(self):
         """出栈"""
@@ -1389,6 +1413,15 @@ class MainController(QObject):
             
             structure = self.structures.get("AVL")
             if structure:
+                # 检查并清理旧定时器，避免动画冲突
+                if hasattr(self, '_animation_timer') and self._animation_timer is not None:
+                    try:
+                        self._animation_timer.stop()
+                        self._animation_timer.deleteLater()
+                    except:
+                        pass
+                    self._animation_timer = None
+                
                 # 开始插入动画
                 structure.insert(value)
                 
@@ -1398,13 +1431,17 @@ class MainController(QObject):
                 self._animation_timer.timeout.connect(lambda: self._update_avl_animation(structure))
                 self._animation_timer.start(50)  # 每50ms更新一次
                 
-                # 设置动画总时长 - 增加时长以便观察旋转
-                self._animation_duration = 3000  # 改为3秒，方便观察
+                # 设置动画总时长
+                self._animation_duration = 2000  # 2秒总时长
                 self._animation_start_time = 0
                 
                 self._update_snapshot()
         except Exception as e:
             self._show_error("插入失败", str(e))
+            # 批量构建时，异常不应中断流程，继续处理队列
+            if hasattr(self, '_avl_build_queue') and self._avl_build_queue:
+                from PyQt5.QtCore import QTimer
+                QTimer.singleShot(100, self._insert_next_avl_value)
     
     def _update_avl_animation(self, structure):
         """更新AVL树动画"""

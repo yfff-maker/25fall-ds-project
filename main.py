@@ -463,10 +463,9 @@ class MainWindow(QMainWindow):
             lay.addWidget(build_line)
             btn_build = QPushButton("批量构建")
             def build_avl():
-                values = build_line.text().strip().split(',')
-                for value in values:
-                    if value.strip():
-                        self.controller.insert_avl(value.strip())
+                values_str = build_line.text().strip()
+                if values_str:
+                    self.controller.build_avl(values_str)
             btn_build.clicked.connect(build_avl)
             lay.addWidget(btn_build)
             

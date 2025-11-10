@@ -1,0 +1,199 @@
+*** Begin Patch
+*** Update File: controllers/adapters.py
+@@
+-                            if rtype == 'LL':
+-                                # LL: 左子节点围绕父节点逆时针旋转 90°
+-                                theta = (math.pi / 2.0) * rotation_progress
+-                                rcx, rcy = AVLAdapter._rotate_point(px, py, cx, cy, +theta)
+-                                positions[child_node] = (rcx, rcy)
+-                                
+-                                # 同步旋转整个子树
+-                                AVLAdapter._rotate_subtree(child_node, positions, px, py, theta)
+-                                
+-                                if rotation_progress > 0:
+-                                    snapshot.step_details = f"AVL旋转：LL 子树围绕父节点逆时针旋转 ({int(rotation_progress * 100)}%)"
++                            if rtype == 'LL':
++                                # LL: 失衡的父节点围绕其左孩子顺时针（右旋）
++                                theta = (math.pi / 2.0) * rotation_progress
++                                # 父节点绕左孩子顺时针旋转
++                                rcx, rcy = AVLAdapter._rotate_point(cx, cy, px, py, -theta)
++                                positions[pivot_node] = (rcx, rcy)
++
++                                # 同步旋转父节点整棵子树，保持其左右孩子相对位置不变
++                                AVLAdapter._rotate_subtree(pivot_node, positions, cx, cy, -theta)
++
++                                if rotation_progress > 0:
++                                    snapshot.step_details = f"AVL旋转：LL 失衡节点绕左孩子向右旋转 ({int(rotation_progress * 100)}%)"
+@@
+-                            elif rtype == 'RR':
+-                                # RR: 右子节点围绕父节点顺时针旋转 90°
+-                                theta = (math.pi / 2.0) * rotation_progress
+-                                rcx, rcy = AVLAdapter._rotate_point(px, py, cx, cy, -theta)
+-                                positions[child_node] = (rcx, rcy)
+-                                
+-                                # 同步旋转整个子树
+-                                AVLAdapter._rotate_subtree(child_node, positions, px, py, -theta)
+-                                
+-                                if rotation_progress > 0:
+-                                    snapshot.step_details = f"AVL旋转：RR 子树围绕父节点顺时针旋转 ({int(rotation_progress * 100)}%)"
++                            elif rtype == 'RR':
++                                # RR: 失衡的父节点围绕其右孩子逆时针（左旋）
++                                theta = (math.pi / 2.0) * rotation_progress
++                                # 父节点绕右孩子逆时针旋转
++                                rcx, rcy = AVLAdapter._rotate_point(cx, cy, px, py, +theta)
++                                positions[pivot_node] = (rcx, rcy)
++
++                                # 同步旋转父节点整棵子树
++                                AVLAdapter._rotate_subtree(pivot_node, positions, cx, cy, +theta)
++
++                                if rotation_progress > 0:
++                                    snapshot.step_details = f"AVL旋转：RR 失衡节点绕右孩子向左旋转 ({int(rotation_progress * 100)}%)"
+@@
+-                            elif rtype == 'LR':
+-                                # LR: 双步旋转
+-                                # 第一步：child 的左子树围绕 child 的右子节点顺时针旋转
+-                                # 第二步：child 围绕 pivot 逆时针旋转
+-                                if len(plan_nodes) > 2:
+-                                    mid_val = plan_nodes[2]  # 中间节点（child 的右子节点）
+-                                    mid_node, mid_pos = get_node_pos(mid_val)
+-                                    
+-                                    if mid_node and mid_pos:
+-                                        mx, my = mid_pos
+-                                        
+-                                        def two_step_rotation(progress, first_step_fn, second_step_fn):
+-                                            if progress < 0.5:
+-                                                p = progress / 0.5
+-                                                return first_step_fn(p)
+-                                            else:
+-                                                p = (progress - 0.5) / 0.5
+-                                                return second_step_fn(p)
+-                                        
+-                                        def step1(p):
+-                                            # 第一步：child 围绕 mid 顺时针旋转 90°
+-                                            th = (math.pi / 2.0) * p
+-                                            rcx, rcy = AVLAdapter._rotate_point(mx, my, cx, cy, -th)
+-                                            positions[child_node] = (rcx, rcy)
+-                                            AVLAdapter._rotate_subtree(child_node, positions, mx, my, -th)
+-                                        
+-                                        def step2(p):
+-                                            # 第二步：child（已旋转）围绕 pivot 逆时针旋转 90°
+-                                            current_child_pos = positions.get(child_node, child_pos)
+-                                            th = (math.pi / 2.0) * p
+-                                            rcx, rcy = AVLAdapter._rotate_point(px, py, current_child_pos[0], current_child_pos[1], +th)
+-                                            positions[child_node] = (rcx, rcy)
+-                                            AVLAdapter._rotate_subtree(child_node, positions, px, py, +th)
+-                                        
+-                                        two_step_rotation(rotation_progress, step1, step2)
+-                                        
+-                                        if rotation_progress > 0:
+-                                            snapshot.step_details = f"AVL旋转：LR 双步旋转（先RR后LL） ({int(rotation_progress * 100)}%)"
++                            elif rtype == 'LR':
++                                # LR: 双步旋转（先对左孩子左旋，再对父节点右旋）
++                                if len(plan_nodes) > 2:
++                                    mid_val = plan_nodes[2]  # 中间节点（child 的右子节点）
++                                    mid_node, mid_pos = get_node_pos(mid_val)
++
++                                    if mid_node and mid_pos:
++                                        mx, my = mid_pos
++
++                                        def two_step_rotation(progress, first_step_fn, second_step_fn):
++                                            if progress < 0.5:
++                                                p = progress / 0.5
++                                                return first_step_fn(p)
++                                            else:
++                                                p = (progress - 0.5) / 0.5
++                                                return second_step_fn(p)
++
++                                        def step1(p):
++                                            # 第一步：左孩子绕其右子（mid）逆时针旋转（左旋）
++                                            th = (math.pi / 2.0) * p
++                                            rcx, rcy = AVLAdapter._rotate_point(mx, my, cx, cy, +th)
++                                            positions[child_node] = (rcx, rcy)
++                                            AVLAdapter._rotate_subtree(child_node, positions, mx, my, +th)
++
++                                        def step2(p):
++                                            # 第二步：父节点绕新的左孩子（mid）顺时针旋转（右旋）
++                                            th = (math.pi / 2.0) * p
++                                            rcx, rcy = AVLAdapter._rotate_point(mx, my, px, py, -th)
++                                            positions[pivot_node] = (rcx, rcy)
++                                            AVLAdapter._rotate_subtree(pivot_node, positions, mx, my, -th)
++
++                                        two_step_rotation(rotation_progress, step1, step2)
++
++                                        if rotation_progress > 0:
++                                            snapshot.step_details = f"AVL旋转：LR 双步（先左旋子，再右旋父） ({int(rotation_progress * 100)}%)"
+@@
+-                            elif rtype == 'RL':
+-                                # RL: 双步旋转
+-                                # 第一步：child 的右子树围绕 child 的左子节点逆时针旋转
+-                                # 第二步：child 围绕 pivot 顺时针旋转
+-                                if len(plan_nodes) > 2:
+-                                    mid_val = plan_nodes[2]  # 中间节点（child 的左子节点）
+-                                    mid_node, mid_pos = get_node_pos(mid_val)
+-                                    
+-                                    if mid_node and mid_pos:
+-                                        mx, my = mid_pos
+-                                        
+-                                        def two_step_rotation(progress, first_step_fn, second_step_fn):
+-                                            if progress < 0.5:
+-                                                p = progress / 0.5
+-                                                return first_step_fn(p)
+-                                            else:
+-                                                p = (progress - 0.5) / 0.5
+-                                                return second_step_fn(p)
+-                                        
+-                                        def step1(p):
+-                                            # 第一步：child 围绕 mid 逆时针旋转 90°
+-                                            th = (math.pi / 2.0) * p
+-                                            rcx, rcy = AVLAdapter._rotate_point(mx, my, cx, cy, +th)
+-                                            positions[child_node] = (rcx, rcy)
+-                                            AVLAdapter._rotate_subtree(child_node, positions, mx, my, +th)
+-                                        
+-                                        def step2(p):
+-                                            # 第二步：child（已旋转）围绕 pivot 顺时针旋转 90°
+-                                            current_child_pos = positions.get(child_node, child_pos)
+-                                            th = (math.pi / 2.0) * p
+-                                            rcx, rcy = AVLAdapter._rotate_point(px, py, current_child_pos[0], current_child_pos[1], -th)
+-                                            positions[child_node] = (rcx, rcy)
+-                                            AVLAdapter._rotate_subtree(child_node, positions, px, py, -th)
+-                                        
+-                                        two_step_rotation(rotation_progress, step1, step2)
+-                                        
+-                                        if rotation_progress > 0:
+-                                            snapshot.step_details = f"AVL旋转：RL 双步旋转（先LL后RR） ({int(rotation_progress * 100)}%)"
++                            elif rtype == 'RL':
++                                # RL: 双步旋转（先对右孩子右旋，再对父节点左旋）
++                                if len(plan_nodes) > 2:
++                                    mid_val = plan_nodes[2]  # 中间节点（child 的左子节点）
++                                    mid_node, mid_pos = get_node_pos(mid_val)
++
++                                    if mid_node and mid_pos:
++                                        mx, my = mid_pos
++
++                                        def two_step_rotation(progress, first_step_fn, second_step_fn):
++                                            if progress < 0.5:
++                                                p = progress / 0.5
++                                                return first_step_fn(p)
++                                            else:
++                                                p = (progress - 0.5) / 0.5
++                                                return second_step_fn(p)
++
++                                        def step1(p):
++                                            # 第一步：右孩子绕其左子（mid）顺时针旋转（右旋）
++                                            th = (math.pi / 2.0) * p
++                                            rcx, rcy = AVLAdapter._rotate_point(mx, my, cx, cy, -th)
++                                            positions[child_node] = (rcx, rcy)
++                                            AVLAdapter._rotate_subtree(child_node, positions, mx, my, -th)
++
++                                        def step2(p):
++                                            # 第二步：父节点绕新的右孩子（mid）逆时针旋转（左旋）
++                                            th = (math.pi / 2.0) * p
++                                            rcx, rcy = AVLAdapter._rotate_point(mx, my, px, py, +th)
++                                            positions[pivot_node] = (rcx, rcy)
++                                            AVLAdapter._rotate_subtree(pivot_node, positions, mx, my, +th)
++
++                                        two_step_rotation(rotation_progress, step1, step2)
++
++                                        if rotation_progress > 0:
++                                            snapshot.step_details = f"AVL旋转：RL 双步（先右旋子，再左旋父） ({int(rotation_progress * 100)}%)"
+*** End Patch

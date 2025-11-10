@@ -36,7 +36,7 @@ class AVLModel(BaseStructure):
         self._current_check_node_value = None
         self._current_check_bf = None
         self._rotation_plan = None        # {'type': 'LL'|..., 'nodes': [...]} 用于动画展示
-        self._phase_breaks = (0.35, 0.75, 0.85, 1.0)  # 插入/检查/决策/旋转
+        self._phase_breaks = (0.0279, 0.0558, 0.0698, 1.0)  # 插入/检查/决策/旋转（旋转阶段10秒，其他阶段0.75秒）
 
     def insert(self, value):
         """插入节点到AVL树"""
@@ -122,20 +122,22 @@ class AVLModel(BaseStructure):
         
         # 4. 如果节点失衡，执行相应的旋转
         if balance > 1:  # 左子树过高
-            if value < node.left.value:
-                # LL情况：左左
+            left_balance = self._get_balance_factor(node.left)
+            if left_balance >= 0:
+                # LL情况：左左（左子节点的左子树更高或等高）
                 return self._rotate_right(node)
             else:
-                # LR情况：左右
+                # LR情况：左右（左子节点的右子树更高）
                 node.left = self._rotate_left(node.left)
                 return self._rotate_right(node)
         
         elif balance < -1:  # 右子树过高
-            if value > node.right.value:
-                # RR情况：右右
+            right_balance = self._get_balance_factor(node.right)
+            if right_balance <= 0:
+                # RR情况：右右（右子节点的右子树更高或等高）
                 return self._rotate_left(node)
             else:
-                # RL情况：右左
+                # RL情况：右左（右子节点的左子树更高）
                 node.right = self._rotate_right(node.right)
                 return self._rotate_left(node)
         
@@ -160,15 +162,21 @@ class AVLModel(BaseStructure):
         self._update_height(node)
         balance = self._get_balance_factor(node)
         if balance > 1:
-            if value < node.left.value:
+            left_balance = self._get_balance_factor(node.left)
+            if left_balance >= 0:
+                # LL情况：左左（左子节点的左子树更高或等高）
                 return self._rotate_right(node)
             else:
+                # LR情况：左右（左子节点的右子树更高）
                 node.left = self._rotate_left(node.left)
                 return self._rotate_right(node)
         if balance < -1:
-            if value > node.right.value:
+            right_balance = self._get_balance_factor(node.right)
+            if right_balance <= 0:
+                # RR情况：右右（右子节点的右子树更高或等高）
                 return self._rotate_left(node)
             else:
+                # RL情况：右左（右子节点的左子树更高）
                 node.right = self._rotate_right(node.right)
                 return self._rotate_left(node)
         return node

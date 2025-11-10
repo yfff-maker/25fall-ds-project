@@ -2056,70 +2056,7 @@ class HuffmanTreeAdapter:
                 queue = leaves
         
         if not queue:
-            # 如果队列为空但已有根节点，显示完整树（使用中序横向、层级纵向布局）
-            root = getattr(huffman, 'root', None)
-            if root:
-                # 1) 中序遍历为每个节点分配横向序号（xIndex），纵向按深度（level）分层
-                positions = {}  # node -> (xIndex, level)
-                x_counter = 0
-                
-                def assign_positions(node, level=0):
-                    nonlocal x_counter
-                    if not node:
-                        return
-                    assign_positions(getattr(node, 'left', None), level + 1)
-                    positions[node] = (x_counter, level)
-                    x_counter += 1
-                    assign_positions(getattr(node, 'right', None), level + 1)
-                
-                assign_positions(root, 0)
-                
-                if positions:
-                    # 2) 把 xIndex/level 转换为像素坐标（类似 BST 的形状）
-                    x_step = 110   # 横向间距
-                    y_step = 90    # 纵向层距
-                    base_x = merge_cx + 200
-                    base_y = y - 140
-                    
-                    # 3) 先画边（父→子），再画节点框
-                    def pix(node):
-                        xi, lv = positions[node]
-                        return base_x + xi * x_step, base_y + lv * y_step
-                    
-                    for node, (xi, lv) in positions.items():
-                        x0, y0 = pix(node)
-                        # 左子
-                        if getattr(node, 'left', None):
-                            xl, yl = pix(node.left)
-                            e = EdgeSnapshot(from_id="", to_id="", arrow_type="arrow")
-                            e.from_x, e.from_y = x0, y0
-                            e.to_x,   e.to_y   = xl, yl
-                            e.color = "#1f77b4"  # 左 0：蓝
-                            snapshot.edges.append(e)
-                        # 右子
-                        if getattr(node, 'right', None):
-                            xr, yr = pix(node.right)
-                            e = EdgeSnapshot(from_id="", to_id="", arrow_type="arrow")
-                            e.from_x, e.from_y = x0, y0
-                            e.to_x,   e.to_y   = xr, yr
-                            e.color = "#d62728"  # 右 1：红
-                            snapshot.edges.append(e)
-                    
-                    # 4) 画节点框（根节点高亮）
-                    for node, (xi, lv) in positions.items():
-                        x0, y0 = pix(node)
-                        nid = f"t_{id(node)}"
-                        val = getattr(node, 'char', None) or "*"
-                        freq = getattr(node, 'freq', 0)
-                        color = "#90EE90" if node == root else "#E8F4FD"
-                        box = BoxSnapshot(
-                            id=f"{nid}_box",
-                            value=f"{val}\n{freq}%",
-                            x=x0 - 40, y=y0 - 20,
-                            width=80, height=40,
-                            color=color
-                        )
-                        snapshot.boxes.append(box)
+            # 队列为空时不再绘制右侧完整树，直接返回
             return snapshot
         
         # 辅助：获取 id、字符与频率、是否子树
@@ -2398,76 +2335,7 @@ class HuffmanTreeAdapter:
                     snapshot.step_details = []
                 snapshot.step_details.append("等待下一轮合并")
         
-        # 若已存在根，则（接近完成时）在右侧绘整棵树并突出根
-        root = getattr(huffman, 'root', None)
-        if root and (state in (None, "done", "huffman_done") or progress >= 0.95):
-            # 1) 中序遍历为每个节点分配横向序号（xIndex），纵向按深度（level）分层
-            positions = {}  # node -> (xIndex, level)
-            x_counter = 0
-            
-            def assign_positions(node, level=0):
-                nonlocal x_counter
-                if not node:
-                    return
-                assign_positions(getattr(node, 'left', None), level + 1)
-                positions[node] = (x_counter, level)
-                x_counter += 1
-                assign_positions(getattr(node, 'right', None), level + 1)
-            
-            assign_positions(root, 0)
-            
-            if positions:
-                # 2) 把 xIndex/level 转换为像素坐标（类似 BST 的形状）
-                x_step = 110   # 横向间距（可按画布宽调整）
-                y_step = 90    # 纵向层距
-                # 让整个树整体偏右一些（避免和队列重叠）
-                # 你也可以把 base_x 设为画布中点，或根据节点总数动态居中
-                base_x = merge_cx + 200
-                base_y = y - 140
-                
-                # 3) 先画边（父→子），再画节点框
-                def pix(node):
-                    xi, lv = positions[node]
-                    return base_x + xi * x_step, base_y + lv * y_step
-                
-                for node, (xi, lv) in positions.items():
-                    x0, y0 = pix(node)
-                    # 左子
-                    if getattr(node, 'left', None):
-                        xl, yl = pix(node.left)
-                        e = EdgeSnapshot(from_id="", to_id="", arrow_type="arrow")
-                        e.from_x, e.from_y = x0, y0
-                        e.to_x,   e.to_y   = xl, yl
-                        e.color = "#1f77b4"  # 左 0：蓝
-                        snapshot.edges.append(e)
-                    # 右子
-                    if getattr(node, 'right', None):
-                        xr, yr = pix(node.right)
-                        e = EdgeSnapshot(from_id="", to_id="", arrow_type="arrow")
-                        e.from_x, e.from_y = x0, y0
-                        e.to_x,   e.to_y   = xr, yr
-                        e.color = "#d62728"  # 右 1：红
-                        snapshot.edges.append(e)
-                
-                # 4) 画节点框（根节点高亮）
-                for node, (xi, lv) in positions.items():
-                    x0, y0 = pix(node)
-                    nid = f"t_{id(node)}"
-                    val = getattr(node, 'char', None) or "*"
-                    freq = getattr(node, 'freq', 0)
-                    color = "#90EE90" if node == root else "#E8F4FD"
-                    box = BoxSnapshot(
-                        id=f"{nid}_box",
-                        value=f"{val}\n{freq}%",
-                        x=x0 - 40, y=y0 - 20,
-                        width=80, height=40,
-                        color=color
-                    )
-                    snapshot.boxes.append(box)
-            
-            if not hasattr(snapshot, 'step_details') or snapshot.step_details is None:
-                snapshot.step_details = []
-            snapshot.step_details.append("最终树已形成：中序横向、层级纵向布局")
+        # 禁用：接近完成时在右侧绘制整棵树
         
         # 操作历史
         if hasattr(huffman, '_operation_history') and huffman._operation_history:
@@ -2709,10 +2577,6 @@ class HuffmanTreeAdapter:
         # 显示已构建的树结构
         if build_step > 0:
             HuffmanTreeAdapter._add_built_tree_nodes(huffman_tree, snapshot, start_x + 200, y, level_height, build_step, progress)
-        
-        # 如果动画完成，显示最终树和编码路径
-        if build_step >= 4 and progress > 0.9:
-            HuffmanTreeAdapter._add_final_tree_with_codes(huffman_tree, snapshot, start_x + 400, y, level_height)
         
         return snapshot
     
@@ -2971,60 +2835,6 @@ class HuffmanTreeAdapter:
         if build_step == 3 and node_index < 2:
             return progress > 0.1 and progress < 0.9
         return False
-    
-    @staticmethod
-    def _add_final_tree_with_codes(huffman_tree, snapshot, start_x, y, level_height):
-        """添加最终树和编码路径 - 使用水平布局"""
-        if not huffman_tree.root:
-            return
-        
-        # 获取哈夫曼编码
-        codes = huffman_tree.get_codes()
-        
-        # 使用类似BST的水平布局算法
-        positions = HuffmanTreeAdapter._layout_huffman_tree_horizontal(huffman_tree.root, start_x, y, level_height)
-        
-        # 生成节点快照
-        for node, (x, y_pos) in positions.items():
-            node_id = f"final_node_{id(node)}"
-            
-            # 创建节点快照
-            if node.char is not None:
-                # 叶子节点 - 只显示权值
-                node_value = str(node.freq)
-                node_color = "#FF6B6B"  # 红色表示叶子节点
-            else:
-                # 内部节点 - 显示权值
-                node_value = str(node.freq)
-                node_color = "#4C78A8"  # 蓝色表示内部节点
-            
-            node_snapshot = NodeSnapshot(
-                id=node_id,
-                value=node_value,
-                x=x - 30,  # 节点中心对齐
-                y=y_pos - 20,
-                node_type="box",
-                width=60,
-                height=40,
-                color=node_color
-            )
-            snapshot.nodes.append(node_snapshot)
-            
-            # 添加编码路径标签
-            if node.char is not None and codes.get(node.char, ''):
-                code_label = BoxSnapshot(
-                    id=f"code_{node.char}",
-                    value=f"{node.char}: {codes.get(node.char, '')}",
-                    x=x - 40,
-                    y=y_pos + 30,
-                    width=80,
-                    height=20,
-                    color="#E0E0E0"
-                )
-                snapshot.boxes.append(code_label)
-                
-        # 添加边连接
-        HuffmanTreeAdapter._add_horizontal_tree_edges(huffman_tree.root, positions, snapshot)
     
     @staticmethod
     def _layout_huffman_tree_horizontal(node, center_x, y, level_height=80, node_width=60, min_spacing=100):
@@ -3724,33 +3534,62 @@ class AVLAdapter:
                             
                             # 根据旋转类型应用旋转
                             if rtype == 'LL':
-                                # LL: 左子节点围绕父节点逆时针旋转 90°
+                                # LL: 失衡节点（pivot）绕着左孩子（child）顺时针旋转 90°
                                 theta = (math.pi / 2.0) * rotation_progress
-                                rcx, rcy = AVLAdapter._rotate_point(px, py, cx, cy, +theta)
-                                positions[child_node] = (rcx, rcy)
                                 
-                                # 旋转整个左子树（child_node 的所有后代）
-                                AVLAdapter._rotate_subtree(child_node, positions, px, py, theta)
+                                # 失衡节点（pivot）绕左孩子（child）顺时针旋转
+                                rpx, rpy = AVLAdapter._rotate_point(cx, cy, px, py, -theta)
+                                positions[pivot_node] = (rpx, rpy)
+                                
+                                # 旋转失衡节点的右子树（如果有），跟着pivot一起旋转
+                                if pivot_node.right and pivot_node.right != child_node:
+                                    AVLAdapter._rotate_subtree(pivot_node.right, positions, cx, cy, -theta)
+                                
+                                # 处理B的右孩子移动到A的左孩子位置的动画
+                                # 左孩子（child）的右子树需要移动到失衡节点的左孩子位置
+                                if child_node.right:
+                                    # 计算目标位置：失衡节点旋转后的左孩子位置
+                                    # 在旋转过程中，child的右子树需要移动到pivot的左孩子位置
+                                    # 由于pivot绕child顺时针旋转，child的右子树需要相应移动
+                                    child_right_x, child_right_y = positions.get(child_node.right, (0, 0))
+                                    if child_node.right in positions:
+                                        # 计算child的右子树应该移动到的位置
+                                        # 随着pivot旋转，child的右子树也需要围绕child旋转
+                                        # 但最终要移动到pivot的左孩子位置
+                                        # 这里我们让child的右子树跟随旋转，但保持相对child的位置
+                                        AVLAdapter._rotate_subtree(child_node.right, positions, cx, cy, -theta)
                                 
                                 if rotation_progress > 0:
-                                    snapshot.step_details = f"AVL旋转：LL 子树围绕父节点逆时针旋转 ({int(rotation_progress * 100)}%)"
+                                    snapshot.step_details = f"AVL旋转：LL 失衡节点绕左孩子顺时针旋转 ({int(rotation_progress * 100)}%)"
                                     
                             elif rtype == 'RR':
-                                # RR: 右子节点围绕父节点顺时针旋转 90°
+                                # RR: 失衡节点（pivot）绕着右孩子（child）逆时针旋转 90°
                                 theta = (math.pi / 2.0) * rotation_progress
-                                rcx, rcy = AVLAdapter._rotate_point(px, py, cx, cy, -theta)
-                                positions[child_node] = (rcx, rcy)
                                 
-                                # 旋转整个右子树
-                                AVLAdapter._rotate_subtree(child_node, positions, px, py, -theta)
+                                # 失衡节点（pivot）绕右孩子（child）逆时针旋转
+                                rpx, rpy = AVLAdapter._rotate_point(cx, cy, px, py, +theta)
+                                positions[pivot_node] = (rpx, rpy)
+                                
+                                # 旋转失衡节点的左子树（如果有），跟着pivot一起旋转
+                                if pivot_node.left and pivot_node.left != child_node:
+                                    AVLAdapter._rotate_subtree(pivot_node.left, positions, cx, cy, +theta)
+                                
+                                # 处理B的左孩子移动到A的右孩子位置的动画
+                                # 右孩子（child）的左子树需要移动到失衡节点的右孩子位置
+                                if child_node.left:
+                                    # 在旋转过程中，child的左子树需要移动到pivot的右孩子位置
+                                    # 由于pivot绕child逆时针旋转，child的左子树需要相应移动
+                                    if child_node.left in positions:
+                                        # child的左子树围绕child旋转，最终移动到pivot的右孩子位置
+                                        AVLAdapter._rotate_subtree(child_node.left, positions, cx, cy, +theta)
                                 
                                 if rotation_progress > 0:
-                                    snapshot.step_details = f"AVL旋转：RR 子树围绕父节点顺时针旋转 ({int(rotation_progress * 100)}%)"
+                                    snapshot.step_details = f"AVL旋转：RR 失衡节点绕右孩子逆时针旋转 ({int(rotation_progress * 100)}%)"
                                     
                             elif rtype == 'LR':
-                                # LR: 双步旋转
-                                # 第一步：child 的左子树围绕 child 的右子节点顺时针旋转
-                                # 第二步：child 围绕 pivot 逆时针旋转
+                                # LR: 双步旋转（先RR后LL）
+                                # 第一步：child 围绕 mid 顺时针旋转（RR旋转：child绕mid顺时针）
+                                # 第二步：pivot 围绕 child 顺时针旋转（LL旋转：pivot绕child顺时针）
                                 if len(plan_nodes) > 2:
                                     mid_val = plan_nodes[2]  # 中间节点（child 的右子节点）
                                     mid_node, mid_pos = get_node_pos(mid_val)
@@ -3767,20 +3606,29 @@ class AVLAdapter:
                                                 return second_step_fn(p)
                                         
                                         def step1(p):
-                                            # 第一步：child 围绕 mid 顺时针旋转 90°
+                                            # 第一步：child 围绕 mid 顺时针旋转 90°（RR旋转）
                                             th = (math.pi / 2.0) * p
                                             rcx, rcy = AVLAdapter._rotate_point(mx, my, cx, cy, -th)
                                             positions[child_node] = (rcx, rcy)
-                                            AVLAdapter._rotate_subtree(child_node, positions, mx, my, -th)
+                                            # child的左子树跟着child一起旋转
+                                            if child_node.left:
+                                                AVLAdapter._rotate_subtree(child_node.left, positions, mx, my, -th)
                                         
                                         def step2(p):
-                                            # 第二步：child（已旋转）围绕 pivot 逆时针旋转 90°
+                                            # 第二步：pivot 围绕 child（已旋转）顺时针旋转 90°（LL旋转）
                                             # 需要获取 child 的当前位置
                                             current_child_pos = positions.get(child_node, child_pos)
+                                            ccx, ccy = current_child_pos[0], current_child_pos[1]
                                             th = (math.pi / 2.0) * p
-                                            rcx, rcy = AVLAdapter._rotate_point(px, py, current_child_pos[0], current_child_pos[1], +th)
-                                            positions[child_node] = (rcx, rcy)
-                                            AVLAdapter._rotate_subtree(child_node, positions, px, py, +th)
+                                            # pivot绕child顺时针旋转
+                                            rpx, rpy = AVLAdapter._rotate_point(ccx, ccy, px, py, -th)
+                                            positions[pivot_node] = (rpx, rpy)
+                                            # pivot的右子树跟着pivot一起旋转
+                                            if pivot_node.right and pivot_node.right != child_node and pivot_node.right != mid_node:
+                                                AVLAdapter._rotate_subtree(pivot_node.right, positions, ccx, ccy, -th)
+                                            # child的右子树（mid）需要移动到pivot的左孩子位置
+                                            if mid_node:
+                                                AVLAdapter._rotate_subtree(mid_node, positions, ccx, ccy, -th)
                                         
                                         two_step_rotation(rotation_progress, step1, step2)
                                         
@@ -3788,9 +3636,9 @@ class AVLAdapter:
                                             snapshot.step_details = f"AVL旋转：LR 双步旋转（先RR后LL） ({int(rotation_progress * 100)}%)"
                                 
                             elif rtype == 'RL':
-                                # RL: 双步旋转
-                                # 第一步：child 的右子树围绕 child 的左子节点逆时针旋转
-                                # 第二步：child 围绕 pivot 顺时针旋转
+                                # RL: 双步旋转（先LL后RR）
+                                # 第一步：child 围绕 mid 逆时针旋转（LL旋转：child绕mid逆时针）
+                                # 第二步：pivot 围绕 child 逆时针旋转（RR旋转：pivot绕child逆时针）
                                 if len(plan_nodes) > 2:
                                     mid_val = plan_nodes[2]  # 中间节点（child 的左子节点）
                                     mid_node, mid_pos = get_node_pos(mid_val)
@@ -3807,24 +3655,49 @@ class AVLAdapter:
                                                 return second_step_fn(p)
                                         
                                         def step1(p):
-                                            # 第一步：child 围绕 mid 逆时针旋转 90°
+                                            # 第一步：child 围绕 mid 逆时针旋转 90°（LL旋转）
                                             th = (math.pi / 2.0) * p
                                             rcx, rcy = AVLAdapter._rotate_point(mx, my, cx, cy, +th)
                                             positions[child_node] = (rcx, rcy)
-                                            AVLAdapter._rotate_subtree(child_node, positions, mx, my, +th)
+                                            # child的右子树跟着child一起旋转
+                                            if child_node.right:
+                                                AVLAdapter._rotate_subtree(child_node.right, positions, mx, my, +th)
                                         
                                         def step2(p):
-                                            # 第二步：child（已旋转）围绕 pivot 顺时针旋转 90°
+                                            # 第二步：pivot 围绕 child（已旋转）逆时针旋转 90°（RR旋转）
+                                            # 需要获取 child 的当前位置
                                             current_child_pos = positions.get(child_node, child_pos)
+                                            ccx, ccy = current_child_pos[0], current_child_pos[1]
                                             th = (math.pi / 2.0) * p
-                                            rcx, rcy = AVLAdapter._rotate_point(px, py, current_child_pos[0], current_child_pos[1], -th)
-                                            positions[child_node] = (rcx, rcy)
-                                            AVLAdapter._rotate_subtree(child_node, positions, px, py, -th)
+                                            # pivot绕child逆时针旋转
+                                            rpx, rpy = AVLAdapter._rotate_point(ccx, ccy, px, py, +th)
+                                            positions[pivot_node] = (rpx, rpy)
+                                            # pivot的左子树跟着pivot一起旋转
+                                            if pivot_node.left and pivot_node.left != child_node and pivot_node.left != mid_node:
+                                                AVLAdapter._rotate_subtree(pivot_node.left, positions, ccx, ccy, +th)
+                                            # child的左子树（mid）需要移动到pivot的右孩子位置
+                                            if mid_node:
+                                                AVLAdapter._rotate_subtree(mid_node, positions, ccx, ccy, +th)
                                         
                                         two_step_rotation(rotation_progress, step1, step2)
                                         
                                         if rotation_progress > 0:
                                             snapshot.step_details = f"AVL旋转：RL 双步旋转（先LL后RR） ({int(rotation_progress * 100)}%)"
+        
+        # 在生成节点快照前，先收集失衡节点信息
+        imbalance_nodes = set()  # 平衡因子为±2的节点集合
+        imbalance_children = set()  # 失衡节点的子节点集合
+        
+        for node in positions.keys():
+            balance_factor = avl._get_balance_factor(node)
+            # 找到失衡节点（平衡因子为±2）
+            if abs(balance_factor) == 2:
+                imbalance_nodes.add(node)
+                # 收集失衡节点的子节点
+                if node.left:
+                    imbalance_children.add(node.left)
+                if node.right:
+                    imbalance_children.add(node.right)
         
         # 生成节点快照
         for node, (x, y_pos) in positions.items():
@@ -3836,35 +3709,18 @@ class AVLAdapter:
                            avl._current_check_node_value is not None and 
                            str(avl._current_check_node_value) == str(node.value))
             
-            # 检查是否是动画中的新节点
-            is_new_node = (animation_state == 'inserting' and 
-                          hasattr(avl, '_new_value') and 
-                          str(avl._new_value) == str(node.value))
-            
-            # 检查是否是插入比较动画中的节点
-            is_insert_comparing_node = (animation_state == 'inserting' and 
-                                      hasattr(avl, '_current_search_node_value') and 
-                                      str(avl._current_search_node_value) == str(node.value))
-            
-            # 检查是否是旋转动画中的节点
-            is_rotating_node = (hasattr(avl, '_rotation_nodes') and 
-                              node.value in avl._rotation_nodes)
-            
-            # 确定节点颜色和边框
-            if is_new_node:
-                node_color = "#FF6B6B"  # 红色表示正在插入的节点
+            # 确定节点颜色和边框（简化逻辑，只保留失衡节点高亮）
+            if node in imbalance_nodes:
+                # 失衡节点（平衡因子为±2）- 整个节点填充黄色
+                node_color = "#FFFF00"  # 纯黄色，更明显
                 border_color = None
-            elif is_insert_comparing_node:
-                node_color = "#FFA500"  # 橙色表示正在比较的节点
+            elif node in imbalance_children:
+                # 失衡节点的子节点（平衡因子为±1）- 整个节点填充橙色
+                node_color = "#FF8C00"  # 深橙色，更明显
                 border_color = None
-            elif abs(balance_factor) > 1:
-                node_color = "#1f4e79"  # 深蓝色表示失衡节点
-                border_color = "#FF6B6B"  # 红色边框表示失衡
-            elif is_rotating_node:
-                node_color = "#FFA500"  # 橙色表示参与旋转的节点
-                border_color = "#FFA500"  # 橙色边框
             else:
-                node_color = "#1f4e79"  # 深蓝色表示正常节点
+                # 其他所有节点（包括新插入、比较、旋转节点）- 深蓝色
+                node_color = "#1f4e79"  # 深蓝色
                 border_color = None
             
             # 使用 positions 中已更新的位置（如果节点参与了旋转，位置已在前面更新）
@@ -3881,7 +3737,7 @@ class AVLAdapter:
                 color=node_color
             )
             
-            # 添加边框颜色属性（检查节点优先金色）
+            # 添加边框颜色属性（检查节点保留金色边框）
             if is_checking:
                 node_snapshot.border_color = "#FFD700"
                 node_snapshot.border_width = 3
