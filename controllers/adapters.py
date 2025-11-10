@@ -2252,8 +2252,6 @@ class HuffmanTreeAdapter:
                     draw_compact_tree(itB, bx, by, scale=0.9)
                 else:
                     draw_box(idB, labelB, freqB, bx, by, color="#F58518")
-                draw_arc(ax0, ay0, ax, ay, color="#F58518", lift=40)
-                draw_arc(bx0, by0, bx, by, color="#F58518", lift=40)
                 if not hasattr(snapshot, 'step_details') or snapshot.step_details is None:
                     snapshot.step_details = []
                 snapshot.step_details.append("漂移到合并区域")
@@ -2506,19 +2504,7 @@ class HuffmanTreeAdapter:
             if tree.char is None and not (is_moving or is_merging or is_returning):
                 HuffmanTreeAdapter._add_subtree_visualization(tree, snapshot, final_x, final_y, node_spacing)
             
-            # 如果节点正在移动，添加移动路径指示
-            if is_moving and progress < 0.8:
-                path_edge = EdgeSnapshot(
-                    from_id=f"path_{char}",
-                    to_id=f"target_{char}",
-                    arrow_type="line"
-                )
-                path_edge.from_x = node_x
-                path_edge.from_y = node_y
-                path_edge.to_x = start_x
-                path_edge.to_y = y + 200
-                path_edge.color = "#FFD700"
-                snapshot.edges.append(path_edge)
+            # 移除移动路径指示线（黄色线）
         
         # 显示合并区域
         merge_box = BoxSnapshot(
