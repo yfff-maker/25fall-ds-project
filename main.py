@@ -4,15 +4,20 @@ import os
 os.environ["HTTP_PROXY"] = "http://127.0.0.1:7890"
 os.environ["HTTPS_PROXY"] = "http://127.0.0.1:7890"
 import sys
+from pathlib import Path
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QGroupBox,
     QPushButton, QLabel, QLineEdit, QDockWidget, QFrame, QMessageBox,
-    QHBoxLayout, QSpinBox, QDialog, QComboBox, QFileDialog, QAction, QTextEdit
+    QHBoxLayout, QSpinBox, QDialog, QComboBox, QFileDialog, QAction,
+    QActionGroup, QTextEdit
 )
+from PyQt5.QtGui import QFontDatabase, QIcon
 from PyQt5.QtCore import Qt, pyqtSlot, QThread, pyqtSignal
 from canvas import Canvas
 from widgets.control_panel import ControlPanel
 from controllers.main_controller import MainController
+from ui.chat_panel import ChatPanel
+from ui.theme_helper import ThemeHelper, ThemeMode
 
 '''父节点选择对话框'''
 class ParentNodeDialog(QDialog):
@@ -55,9 +60,13 @@ class ParentNodeDialog(QDialog):
 '''初始化整体UI 主窗口类'''
 class MainWindow(QMainWindow):
     '''view层'''
-    def __init__(self):
+    def __init__(self, theme_helper: ThemeHelper, stylesheet_path: Path):
         super().__init__()
         try:
+            self.theme_helper = theme_helper
+            self.stylesheet_path = stylesheet_path
+            self._theme_actions = {}
+
             self.setWindowTitle("数据结构可视化模拟器")
             self.resize(1280, 820)
 
@@ -90,11 +99,20 @@ class MainWindow(QMainWindow):
             
             # LLM线程管理
             self._llm_thread = None
+            self._chat_pending_text = None
             
             # 连接控制器信号
             self.controller.snapshot_updated.connect(self.canvas.render_snapshot)
             self.controller.hint_updated.connect(self.mode_label.setText)
             self.controller.parent_selection_requested.connect(self._handle_parent_selection_request)
+
+            # 右侧：LLM 对话面板（常驻）
+            self.chat_dock = QDockWidget("LLM 对话", self)
+            self.chat_dock.setAllowedAreas(Qt.RightDockWidgetArea)
+            self.chat_panel = ChatPanel(self.chat_dock)
+            self.chat_dock.setWidget(self.chat_panel)
+            self.addDockWidget(Qt.RightDockWidgetArea, self.chat_dock)
+            self.chat_panel.sendMessage.connect(self._on_chat_send)
 
             # 选择默认数据结构
             self.select_structure("SequentialList")
@@ -107,6 +125,9 @@ class MainWindow(QMainWindow):
             self.ctrl_panel.pauseClicked.connect(self._handle_pause_clicked)
             self.ctrl_panel.stepClicked.connect(self._handle_step_clicked)
             self.ctrl_panel.speedChanged.connect(self.canvas.animator_speed)
+
+            # 初始化主题菜单勾选状态
+            self._update_theme_action_checks(self.theme_helper.current_mode)
         except Exception as e:
             import traceback
             error_msg = f"MainWindow初始化失败:\n{str(e)}\n\n详细错误信息:\n{traceback.format_exc()}"
@@ -118,6 +139,7 @@ class MainWindow(QMainWindow):
     # —— DSL命令 —— #
         group_dsl = QGroupBox("DSL命令")
         gdsl = QVBoxLayout(group_dsl)
+
         
         # DSL命令输入框(多行)
         self.dsl_text_edit = QTextEdit()
@@ -139,6 +161,10 @@ class MainWindow(QMainWindow):
         btn_clear_dsl.clicked.connect(self._handle_clear_dsl)
         btn_load_dsl = QPushButton("从文件导入")
         btn_load_dsl.clicked.connect(self._handle_load_dsl_file)
+        for btn in (btn_execute_dsl, btn_clear_dsl, btn_load_dsl):
+            btn.setProperty("buttonType", "structure-secondary")
+            btn.style().unpolish(btn)
+            btn.style().polish(btn)
         
         dsl_btn_layout.addWidget(btn_execute_dsl)
         dsl_btn_layout.addWidget(btn_clear_dsl)
@@ -159,10 +185,16 @@ class MainWindow(QMainWindow):
 
         btn_seq = QPushButton("顺序表 SequentialList")
         btn_seq.clicked.connect(lambda: self.select_structure("SequentialList"))
+        btn_seq.setProperty("buttonType", "structure-primary")
+        btn_seq.style().unpolish(btn_seq)
+        btn_seq.style().polish(btn_seq)
         gl.addWidget(btn_seq)
 
         btn_ll = QPushButton("链表 LinkedList")
         btn_ll.clicked.connect(lambda: self.select_structure("LinkedList"))
+        btn_ll.setProperty("buttonType", "structure-primary")
+        btn_ll.style().unpolish(btn_ll)
+        btn_ll.style().polish(btn_ll)
         gl.addWidget(btn_ll)
 
     # —— 栈 —— #
@@ -171,6 +203,9 @@ class MainWindow(QMainWindow):
 
         btn_stack = QPushButton("栈 Stack")
         btn_stack.clicked.connect(lambda: self.select_structure("Stack"))
+        btn_stack.setProperty("buttonType", "structure-primary")
+        btn_stack.style().unpolish(btn_stack)
+        btn_stack.style().polish(btn_stack)
         gs.addWidget(btn_stack)
 
     # —— 树 —— #
@@ -179,18 +214,30 @@ class MainWindow(QMainWindow):
 
         btn_bt = QPushButton("链式二叉树 BinaryTree")
         btn_bt.clicked.connect(lambda: self.select_structure("BinaryTree"))
+        btn_bt.setProperty("buttonType", "structure-primary")
+        btn_bt.style().unpolish(btn_bt)
+        btn_bt.style().polish(btn_bt)
         gt.addWidget(btn_bt)
 
         btn_bst = QPushButton("二叉搜索树 BST")
         btn_bst.clicked.connect(lambda: self.select_structure("BST"))
+        btn_bst.setProperty("buttonType", "structure-primary")
+        btn_bst.style().unpolish(btn_bst)
+        btn_bst.style().polish(btn_bst)
         gt.addWidget(btn_bst)
 
         btn_avl = QPushButton("平衡二叉树 AVL")
         btn_avl.clicked.connect(lambda: self.select_structure("AVL"))
+        btn_avl.setProperty("buttonType", "structure-primary")
+        btn_avl.style().unpolish(btn_avl)
+        btn_avl.style().polish(btn_avl)
         gt.addWidget(btn_avl)
 
         btn_hf = QPushButton("哈夫曼树 HuffmanTree")
         btn_hf.clicked.connect(lambda: self.select_structure("HuffmanTree"))
+        btn_hf.setProperty("buttonType", "structure-primary")
+        btn_hf.style().unpolish(btn_hf)
+        btn_hf.style().polish(btn_hf)
         gt.addWidget(btn_hf)
 
     # —— 动态操作区域容器 —— #
@@ -224,14 +271,26 @@ class MainWindow(QMainWindow):
         act_save_as.setShortcut("Ctrl+Shift+S")
         act_save_as.triggered.connect(self._action_save_as)
         file_menu.addAction(act_save_as)
-        
-        # AI助手菜单
-        ai_menu = menubar.addMenu("AI助手")
-        
-        act_nl_command = QAction("自然语言操作", self)
-        act_nl_command.setShortcut("Ctrl+L")
-        act_nl_command.triggered.connect(self._action_natural_language)
-        ai_menu.addAction(act_nl_command)
+        # 视图菜单：主题切换
+        view_menu = menubar.addMenu("视图")
+        theme_menu = view_menu.addMenu("主题")
+
+        action_group = QActionGroup(self)
+        action_group.setExclusive(True)
+
+        light_action = QAction("浅色", self, checkable=True)
+        dark_action = QAction("深色", self, checkable=True)
+        auto_action = QAction("跟随系统", self, checkable=True)
+
+        for act, mode in (
+            (light_action, ThemeMode.LIGHT),
+            (dark_action, ThemeMode.DARK),
+            (auto_action, ThemeMode.AUTO),
+        ):
+            action_group.addAction(act)
+            theme_menu.addAction(act)
+            act.triggered.connect(lambda checked, m=mode: self._on_theme_selected(m))
+            self._theme_actions[mode] = act
 
     def _action_open(self):
         path, _ = QFileDialog.getOpenFileName(self, "打开工程", "", "Data Structure Vis (*.dsv);;JSON (*.json);;All Files (*)")
@@ -275,6 +334,16 @@ class MainWindow(QMainWindow):
             w = item.widget()
             if w:
                 w.deleteLater()
+
+    @staticmethod
+    def _mark_secondary(*buttons):
+        for btn in buttons:
+            if btn is None:
+                continue
+            btn.setProperty("buttonType", "secondary")
+            # 触发样式刷新
+            btn.style().unpolish(btn)
+            btn.style().polish(btn)
 
     def _make_dynamic_panel_for(self, key: str):
         self._clear_dynamic_panel()
@@ -327,6 +396,7 @@ class MainWindow(QMainWindow):
             h3.addWidget(btn_head)
             h3.addWidget(btn_tail)
             lay.addLayout(h3)
+            self._mark_secondary(btn_del, btn_head, btn_tail)
 
         elif key == "LinkedList":
             # 添加构建功能
@@ -373,6 +443,7 @@ class MainWindow(QMainWindow):
             b1 = QPushButton("按值删除")
             b1.clicked.connect(lambda: self.controller.delete_by_value_linked_list(get_value()))
             lay.addWidget(b1)
+            self._mark_secondary(btn_del, btn_head, btn_tail, b1)
 
         elif key == "Stack":
             # 添加构建功能
@@ -400,6 +471,7 @@ class MainWindow(QMainWindow):
             b3 = QPushButton("Clear Stack")
             b3.clicked.connect(lambda: self.controller.clear_stack())
             lay.addWidget(b1); lay.addWidget(b2); lay.addWidget(b3)
+            self._mark_secondary(b2, b3)
 
         elif key == "BinaryTree":
             lay.addWidget(input_line)
@@ -427,6 +499,7 @@ class MainWindow(QMainWindow):
             b5 = QPushButton("删除节点")
             b5.clicked.connect(lambda: self._delete_binary_tree_node(get_value()))
             lay.addWidget(b5)
+            self._mark_secondary(b2, b3, b4, b5)
 
         elif key == "BST":
             # 插入功能
@@ -449,6 +522,7 @@ class MainWindow(QMainWindow):
             b3 = QPushButton("删除")
             b3.clicked.connect(lambda: self.controller.delete_bst(get_value()))
             lay.addWidget(b3)
+            self._mark_secondary(search_btn, b3)
 
         elif key == "AVL":
             # 插入功能
@@ -473,6 +547,7 @@ class MainWindow(QMainWindow):
             b3 = QPushButton("清空树")
             b3.clicked.connect(lambda: self.controller.clear_avl())
             lay.addWidget(b3)
+            self._mark_secondary(b3)
 
         elif key == "HuffmanTree":
             line = QLineEdit()
@@ -484,6 +559,12 @@ class MainWindow(QMainWindow):
                 self.controller.build_huffman_tree(line.text().strip())
             b1.clicked.connect(build)
             lay.addWidget(b1)
+            self._mark_secondary(b1)
+
+        # 通用清空按钮：始终出现在面板底部，清空当前结构
+        clear_btn = QPushButton("清空当前结构")
+        clear_btn.clicked.connect(self.controller.clear_current_structure)
+        lay.addWidget(clear_btn)
 
         self.dynamic_layout.addWidget(box)
 
@@ -769,6 +850,75 @@ class MainWindow(QMainWindow):
         
         QMessageBox.critical(self, "错误", f"执行自然语言命令时出错: {error_msg}")
 
+    # —— 右侧对话面板 发送与回调 —— #
+    def _on_chat_send(self, text: str):
+        """来自右侧面板的发送事件"""
+        if not text:
+            return
+        # 展示用户消息
+        self.chat_panel.append_user(text)
+        self._chat_pending_text = text
+
+        # 若已有线程在运行，则中止
+        if self._llm_thread and self._llm_thread.isRunning():
+            self._llm_thread.terminate()
+            self._llm_thread.wait()
+
+        # 后台进行“仅转换”
+        self._llm_thread = LLMWorkerThread(self.controller, text, self)
+        self._llm_thread.finished.connect(self._on_chat_llm_finished)
+        self._llm_thread.error.connect(self._on_chat_llm_error)
+        self._llm_thread.start()
+
+    def _on_chat_llm_finished(self, success: bool, message: str, action):
+        """后台转换完成：在主线程执行并把结果写回聊天面板"""
+        try:
+            # 回收线程
+            if self._llm_thread:
+                self._llm_thread.deleteLater()
+                self._llm_thread = None
+
+            if success and action:
+                # 展示转换结果
+                try:
+                    import json
+                    action_json = json.dumps(action, ensure_ascii=False, indent=2)
+                except Exception:
+                    action_json = str(action)
+                self.chat_panel.append_assistant(f"已理解你的意图，转换为动作：\n{action_json}\n正在执行...")
+
+                # 执行动作（必须主线程）
+                exec_success, exec_message = self.controller.action_executor.execute_action(action)
+                if exec_success:
+                    self.chat_panel.append_assistant(f"执行成功：{exec_message}")
+                else:
+                    self.chat_panel.append_assistant(f"执行失败：{exec_message}\n你也可以尝试在左侧 DSL 面板手动输入命令。")
+            else:
+                # 转换失败信息
+                self.chat_panel.append_assistant(f"抱歉，未能理解：\n{message}\n你可以尝试更具体的描述，或在左侧 DSL 面板手动输入命令。")
+        except Exception as e:
+            self.chat_panel.append_assistant(f"处理结果时发生错误：{e}")
+
+    def _on_chat_llm_error(self, error_msg: str):
+        # 回收线程
+        if self._llm_thread:
+            self._llm_thread.deleteLater()
+            self._llm_thread = None
+        self.chat_panel.append_assistant(f"调用出错：{error_msg}")
+
+    def _on_theme_selected(self, mode: ThemeMode):
+        """菜单切换主题"""
+        try:
+            stylesheet = self.stylesheet_path if self.stylesheet_path and self.stylesheet_path.exists() else None
+            self.theme_helper.apply(mode, stylesheet)
+            self._update_theme_action_checks(mode)
+        except Exception as e:
+            QMessageBox.warning(self, "主题切换失败", str(e))
+
+    def _update_theme_action_checks(self, mode: ThemeMode):
+        for m, act in self._theme_actions.items():
+            act.setChecked(m == mode)
+
 
 '''LLM调用工作线程'''
 class LLMWorkerThread(QThread):
@@ -798,6 +948,7 @@ class NaturalLanguageDialog(QDialog):
         self.setWindowTitle("自然语言操作")
         self.setModal(True)
         self.resize(500, 300)
+        self.setObjectName("ModernDialog")
         
         layout = QVBoxLayout()
         
@@ -816,6 +967,7 @@ class NaturalLanguageDialog(QDialog):
         button_layout = QHBoxLayout()
         ok_button = QPushButton("执行")
         cancel_button = QPushButton("取消")
+        cancel_button.setProperty("buttonType", "secondary")
         
         ok_button.clicked.connect(self.accept)
         cancel_button.clicked.connect(self.reject)
@@ -835,7 +987,27 @@ def main():
         print("正在初始化QApplication...", file=sys.stderr)
         app = QApplication(sys.argv)
         print("正在创建MainWindow...", file=sys.stderr)
-        win = MainWindow()
+        base_dir = Path(__file__).resolve().parent
+        # 注册字体
+        fonts_dir = base_dir / "resources" / "fonts"
+        if fonts_dir.exists():
+            for font_file in fonts_dir.glob("*.ttf"):
+                QFontDatabase.addApplicationFont(str(font_file))
+
+        # 应用样式与调色板
+        styles_path = base_dir / "styles" / "modern.qss"
+        theme_helper = ThemeHelper(app)
+        if styles_path.exists():
+            theme_helper.apply(ThemeMode.LIGHT, styles_path)
+        else:
+            theme_helper.apply(ThemeMode.LIGHT)
+
+        # 设置应用图标
+        icon_path = base_dir / "resources" / "icons" / "app.svg"
+        if icon_path.exists():
+            app.setWindowIcon(QIcon(str(icon_path)))
+
+        win = MainWindow(theme_helper, styles_path)
         print("正在显示窗口...", file=sys.stderr)
         win.show()
         win.raise_()  # 将窗口提升到最前面

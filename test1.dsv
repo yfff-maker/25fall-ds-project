@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "current_structure_key": "HuffmanTree",
+  "current_structure_key": "BST",
   "structures": {
     "SequentialList": {
       "elements": [
@@ -13,13 +13,7 @@
       "capacity": 100
     },
     "LinkedList": {
-      "elements": [
-        "10",
-        "20",
-        "25",
-        "30",
-        "40"
-      ]
+      "elements": []
     },
     "Stack": {
       "elements": [
@@ -38,31 +32,44 @@
       }
     },
     "BST": {
+      "root": null
+    },
+    "AVL": {
       "root": {
-        "value": 50.0,
+        "value": 6.0,
         "left": {
-          "value": 40.0,
-          "left": {
-            "value": 20.0,
-            "left": null,
-            "right": null
-          },
-          "right": null
+          "value": 3.0,
+          "left": null,
+          "right": null,
+          "height": 1
         },
         "right": {
-          "value": 60.0,
-          "left": null,
-          "right": null
-        }
+          "value": 9.0,
+          "left": {
+            "value": 7.0,
+            "left": null,
+            "right": null,
+            "height": 1
+          },
+          "right": {
+            "value": 10.0,
+            "left": null,
+            "right": null,
+            "height": 1
+          },
+          "height": 2
+        },
+        "height": 3
       }
     },
     "HuffmanTree": {
       "freq_map": {
-        "A": 25,
-        "B": 15,
-        "C": 27,
-        "D": 5,
-        "E": 30
+        "a": 5,
+        "b": 9,
+        "c": 12,
+        "d": 13,
+        "e": 16,
+        "f": 45
       }
     }
   }

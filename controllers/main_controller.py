@@ -1503,6 +1503,45 @@ class MainController(QObject):
         except Exception as e:
             self._show_error("清空失败", str(e))
     
+    def clear_current_structure(self):
+        """清空当前选中的数据结构（数据与动画状态）"""
+        try:
+            # 停止并清理当前动画定时器，避免残留回调
+            if hasattr(self, '_animation_timer') and self._animation_timer is not None:
+                try:
+                    self._animation_timer.stop()
+                    self._animation_timer.deleteLater()
+                except Exception:
+                    pass
+                self._animation_timer = None
+                self._animation_start_time = 0
+            
+            structure = self._get_current_structure()
+            if not structure:
+                return
+            
+            # 优先使用模型自带的 clear()
+            if hasattr(structure, 'clear') and callable(getattr(structure, 'clear')):
+                structure.clear()
+            else:
+                # 兜底：常见字段重置
+                if hasattr(structure, 'root'):
+                    structure.root = None
+                if hasattr(structure, '_animation_state'):
+                    structure._animation_state = None
+                if hasattr(structure, '_animation_progress'):
+                    structure._animation_progress = 0.0
+                if hasattr(structure, '_operation_history'):
+                    try:
+                        structure._operation_history.clear()
+                    except Exception:
+                        structure._operation_history = []
+            
+            # 刷新界面
+            self._update_snapshot()
+        except Exception as e:
+            self._show_error("清空失败", str(e))
+    
     # ========== 自然语言处理功能 ==========
     
     def convert_natural_language_to_action(self, user_input: str) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
