@@ -3462,227 +3462,19 @@ class AVLAdapter:
         positions = AVLAdapter._layout_tree(
             avl.root, start_x, y, level_height, node_width, min_spacing)
         
-        # 检查旋转计划并应用旋转动画
-        import math
-        rotation_plan = getattr(avl, '_rotation_plan', None)
-        rotation_nodes = getattr(avl, '_rotation_nodes', []) or []
-        
-        # 添加调试输出
-        print(f"DEBUG - Adapter: animation_state={animation_state}, progress={animation_progress}")
-        print(f"DEBUG - Adapter: rotation_plan={rotation_plan}")
-        
-        # 放宽触发条件：只要有 rotation_plan 且进度>=0.85 就应用旋转
-        if rotation_plan and animation_state == 'inserting' and animation_progress >= 0.85:
-            rtype = rotation_plan.get('type')
-            plan_nodes = rotation_plan.get('nodes', [])
-            
-            print(f"DEBUG - Applying rotation: type={rtype}, nodes={plan_nodes}, progress={animation_progress}")
-            
-            # 获取参与旋转的节点对象和位置
-            def get_node_pos(val):
-                """根据节点值获取节点对象和位置"""
-                node_obj = AVLAdapter._find_node_by_value(avl.root, val)
-                if node_obj and node_obj in positions:
-                    return node_obj, positions[node_obj]
-                return None, None
-            
-            # 获取旋转中心（失衡节点，即 pivot）
-            if len(plan_nodes) > 0:
-                pivot_val = plan_nodes[0]
-                pivot_node, pivot_pos = get_node_pos(pivot_val)
-                
-                if pivot_node and pivot_pos:
-                    px, py = pivot_pos
-                    
-                    # 获取旋转的子节点（重子）
-                    if len(plan_nodes) > 1:
-                        child_val = plan_nodes[1]
-                        child_node, child_pos = get_node_pos(child_val)
-                        
-                        if child_node and child_pos:
-                            cx, cy = child_pos
-                            
-                            # 计算旋转角度：根据进度和旋转阶段
-                            # 对于插入动画，旋转阶段在 progress >= 0.85 时开始
-                            # 将 0.85-1.0 映射到 0.0-1.0
-                            if animation_state == 'inserting':
-                                phase_breaks = getattr(avl, '_phase_breaks', (0.35, 0.75, 0.85, 1.0))
-                                rotation_start = phase_breaks[2]  # 0.85
-                                rotation_end = phase_breaks[3]    # 1.0
-                                if animation_progress >= rotation_start:
-                                    # 将进度映射到 0.0-1.0
-                                    rotation_progress = (animation_progress - rotation_start) / (rotation_end - rotation_start)
-                                    rotation_progress = max(0.0, min(1.0, rotation_progress))
-                                else:
-                                    rotation_progress = 0.0
-                            else:
-                                rotation_progress = max(0.0, min(1.0, animation_progress))
-                            
-                            # 根据旋转类型应用旋转
-                            if rtype == 'LL':
-                                # LL: 失衡节点（pivot）绕着左孩子（child）顺时针旋转 90°
-                                theta = (math.pi / 2.0) * rotation_progress
-                                
-                                # 失衡节点（pivot）绕左孩子（child）顺时针旋转
-                                rpx, rpy = AVLAdapter._rotate_point(cx, cy, px, py, -theta)
-                                positions[pivot_node] = (rpx, rpy)
-                                
-                                # 旋转失衡节点的右子树（如果有），跟着pivot一起旋转
-                                if pivot_node.right and pivot_node.right != child_node:
-                                    AVLAdapter._rotate_subtree(pivot_node.right, positions, cx, cy, -theta)
-                                
-                                # 处理B的右孩子移动到A的左孩子位置的动画
-                                # 左孩子（child）的右子树需要移动到失衡节点的左孩子位置
-                                if child_node.right:
-                                    # 计算目标位置：失衡节点旋转后的左孩子位置
-                                    # 在旋转过程中，child的右子树需要移动到pivot的左孩子位置
-                                    # 由于pivot绕child顺时针旋转，child的右子树需要相应移动
-                                    child_right_x, child_right_y = positions.get(child_node.right, (0, 0))
-                                    if child_node.right in positions:
-                                        # 计算child的右子树应该移动到的位置
-                                        # 随着pivot旋转，child的右子树也需要围绕child旋转
-                                        # 但最终要移动到pivot的左孩子位置
-                                        # 这里我们让child的右子树跟随旋转，但保持相对child的位置
-                                        AVLAdapter._rotate_subtree(child_node.right, positions, cx, cy, -theta)
-                                
-                                if rotation_progress > 0:
-                                    snapshot.step_details = f"AVL旋转：LL 失衡节点绕左孩子顺时针旋转 ({int(rotation_progress * 100)}%)"
-                                    
-                            elif rtype == 'RR':
-                                # RR: 失衡节点（pivot）绕着右孩子（child）逆时针旋转 90°
-                                theta = (math.pi / 2.0) * rotation_progress
-                                
-                                # 失衡节点（pivot）绕右孩子（child）逆时针旋转
-                                rpx, rpy = AVLAdapter._rotate_point(cx, cy, px, py, +theta)
-                                positions[pivot_node] = (rpx, rpy)
-                                
-                                # 旋转失衡节点的左子树（如果有），跟着pivot一起旋转
-                                if pivot_node.left and pivot_node.left != child_node:
-                                    AVLAdapter._rotate_subtree(pivot_node.left, positions, cx, cy, +theta)
-                                
-                                # 处理B的左孩子移动到A的右孩子位置的动画
-                                # 右孩子（child）的左子树需要移动到失衡节点的右孩子位置
-                                if child_node.left:
-                                    # 在旋转过程中，child的左子树需要移动到pivot的右孩子位置
-                                    # 由于pivot绕child逆时针旋转，child的左子树需要相应移动
-                                    if child_node.left in positions:
-                                        # child的左子树围绕child旋转，最终移动到pivot的右孩子位置
-                                        AVLAdapter._rotate_subtree(child_node.left, positions, cx, cy, +theta)
-                                
-                                if rotation_progress > 0:
-                                    snapshot.step_details = f"AVL旋转：RR 失衡节点绕右孩子逆时针旋转 ({int(rotation_progress * 100)}%)"
-                                    
-                            elif rtype == 'LR':
-                                # LR: 双步旋转（先RR后LL）
-                                # 第一步：child 围绕 mid 顺时针旋转（RR旋转：child绕mid顺时针）
-                                # 第二步：pivot 围绕 child 顺时针旋转（LL旋转：pivot绕child顺时针）
-                                if len(plan_nodes) > 2:
-                                    mid_val = plan_nodes[2]  # 中间节点（child 的右子节点）
-                                    mid_node, mid_pos = get_node_pos(mid_val)
-                                    
-                                    if mid_node and mid_pos:
-                                        mx, my = mid_pos
-                                        
-                                        def two_step_rotation(progress, first_step_fn, second_step_fn):
-                                            if progress < 0.5:
-                                                p = progress / 0.5
-                                                return first_step_fn(p)
-                                            else:
-                                                p = (progress - 0.5) / 0.5
-                                                return second_step_fn(p)
-                                        
-                                        def step1(p):
-                                            # 第一步：child 围绕 mid 顺时针旋转 90°（RR旋转）
-                                            th = (math.pi / 2.0) * p
-                                            rcx, rcy = AVLAdapter._rotate_point(mx, my, cx, cy, -th)
-                                            positions[child_node] = (rcx, rcy)
-                                            # child的左子树跟着child一起旋转
-                                            if child_node.left:
-                                                AVLAdapter._rotate_subtree(child_node.left, positions, mx, my, -th)
-                                        
-                                        def step2(p):
-                                            # 第二步：pivot 围绕 child（已旋转）顺时针旋转 90°（LL旋转）
-                                            # 需要获取 child 的当前位置
-                                            current_child_pos = positions.get(child_node, child_pos)
-                                            ccx, ccy = current_child_pos[0], current_child_pos[1]
-                                            th = (math.pi / 2.0) * p
-                                            # pivot绕child顺时针旋转
-                                            rpx, rpy = AVLAdapter._rotate_point(ccx, ccy, px, py, -th)
-                                            positions[pivot_node] = (rpx, rpy)
-                                            # pivot的右子树跟着pivot一起旋转
-                                            if pivot_node.right and pivot_node.right != child_node and pivot_node.right != mid_node:
-                                                AVLAdapter._rotate_subtree(pivot_node.right, positions, ccx, ccy, -th)
-                                            # child的右子树（mid）需要移动到pivot的左孩子位置
-                                            if mid_node:
-                                                AVLAdapter._rotate_subtree(mid_node, positions, ccx, ccy, -th)
-                                        
-                                        two_step_rotation(rotation_progress, step1, step2)
-                                        
-                                        if rotation_progress > 0:
-                                            snapshot.step_details = f"AVL旋转：LR 双步旋转（先RR后LL） ({int(rotation_progress * 100)}%)"
-                                
-                            elif rtype == 'RL':
-                                # RL: 双步旋转（先LL后RR）
-                                # 第一步：child 围绕 mid 逆时针旋转（LL旋转：child绕mid逆时针）
-                                # 第二步：pivot 围绕 child 逆时针旋转（RR旋转：pivot绕child逆时针）
-                                if len(plan_nodes) > 2:
-                                    mid_val = plan_nodes[2]  # 中间节点（child 的左子节点）
-                                    mid_node, mid_pos = get_node_pos(mid_val)
-                                    
-                                    if mid_node and mid_pos:
-                                        mx, my = mid_pos
-                                        
-                                        def two_step_rotation(progress, first_step_fn, second_step_fn):
-                                            if progress < 0.5:
-                                                p = progress / 0.5
-                                                return first_step_fn(p)
-                                            else:
-                                                p = (progress - 0.5) / 0.5
-                                                return second_step_fn(p)
-                                        
-                                        def step1(p):
-                                            # 第一步：child 围绕 mid 逆时针旋转 90°（LL旋转）
-                                            th = (math.pi / 2.0) * p
-                                            rcx, rcy = AVLAdapter._rotate_point(mx, my, cx, cy, +th)
-                                            positions[child_node] = (rcx, rcy)
-                                            # child的右子树跟着child一起旋转
-                                            if child_node.right:
-                                                AVLAdapter._rotate_subtree(child_node.right, positions, mx, my, +th)
-                                        
-                                        def step2(p):
-                                            # 第二步：pivot 围绕 child（已旋转）逆时针旋转 90°（RR旋转）
-                                            # 需要获取 child 的当前位置
-                                            current_child_pos = positions.get(child_node, child_pos)
-                                            ccx, ccy = current_child_pos[0], current_child_pos[1]
-                                            th = (math.pi / 2.0) * p
-                                            # pivot绕child逆时针旋转
-                                            rpx, rpy = AVLAdapter._rotate_point(ccx, ccy, px, py, +th)
-                                            positions[pivot_node] = (rpx, rpy)
-                                            # pivot的左子树跟着pivot一起旋转
-                                            if pivot_node.left and pivot_node.left != child_node and pivot_node.left != mid_node:
-                                                AVLAdapter._rotate_subtree(pivot_node.left, positions, ccx, ccy, +th)
-                                            # child的左子树（mid）需要移动到pivot的右孩子位置
-                                            if mid_node:
-                                                AVLAdapter._rotate_subtree(mid_node, positions, ccx, ccy, +th)
-                                        
-                                        two_step_rotation(rotation_progress, step1, step2)
-                                        
-                                        if rotation_progress > 0:
-                                            snapshot.step_details = f"AVL旋转：RL 双步旋转（先LL后RR） ({int(rotation_progress * 100)}%)"
-        
         # 在生成节点快照前，先收集失衡节点信息
         imbalance_nodes = set()  # 平衡因子为±2的节点集合
-        imbalance_children = set()  # 失衡节点的子节点集合
+        imbalance_children = set()  # 失衡节点的目标子节点集合
         
         for node in positions.keys():
             balance_factor = avl._get_balance_factor(node)
             # 找到失衡节点（平衡因子为±2）
             if abs(balance_factor) == 2:
                 imbalance_nodes.add(node)
-                # 收集失衡节点的子节点
-                if node.left:
+                # 根据平衡方向只标记重子节点
+                if balance_factor > 1 and node.left:
                     imbalance_children.add(node.left)
-                if node.right:
+                elif balance_factor < -1 and node.right:
                     imbalance_children.add(node.right)
         
         # 生成节点快照
@@ -3697,12 +3489,12 @@ class AVLAdapter:
             
             # 确定节点颜色和边框（简化逻辑，只保留失衡节点高亮）
             if node in imbalance_nodes:
-                # 失衡节点（平衡因子为±2）- 整个节点填充黄色
-                node_color = "#FFFF00"  # 纯黄色，更明显
+                # 失衡节点（平衡因子为±2）- 整个节点填充红色
+                node_color = "#FF0000"
                 border_color = None
             elif node in imbalance_children:
-                # 失衡节点的子节点（平衡因子为±1）- 整个节点填充橙色
-                node_color = "#FF8C00"  # 深橙色，更明显
+                # 失衡节点的重子节点 - 整个节点填充黄色
+                node_color = "#FFFF00"
                 border_color = None
             else:
                 # 其他所有节点（包括新插入、比较、旋转节点）- 深蓝色
