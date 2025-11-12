@@ -36,7 +36,11 @@ class AVLModel(BaseStructure):
         self._current_check_node_value = None
         self._current_check_bf = None
         self._rotation_plan = None        # {'type': 'LL'|..., 'nodes': [...]} 用于动画展示
-        self._phase_breaks = (0.0279, 0.0558, 0.0698, 1.0)  # 插入/检查/决策/旋转（旋转阶段10秒，其他阶段0.75秒）
+        # 插入动画阶段：比较 -> 检查 -> 高亮提示 -> 旋转
+        # 将高亮提示阶段时长扩展为原来的5倍，以便用户有更多时间观察失衡节点
+        self._phase_breaks = (0.0279, 0.0558, 0.3058, 1.0)
+        self._insert_committed = False    # 是否已将真实节点插入但未旋转
+        self._rotation_applied = False    # 是否已执行计划中的旋转
 
     def insert(self, value):
         """插入节点到AVL树"""
@@ -75,6 +79,8 @@ class AVLModel(BaseStructure):
         shadow_root = self._clone_tree(self.root)
         shadow_root = self._shadow_insert_no_rotate(shadow_root, v)  # 使用不旋转的版本，以便分析失衡节点
         self._rotation_plan = self._analyze_first_imbalance_and_rotation(shadow_root)
+        self._insert_committed = False
+        self._rotation_applied = False
         
         # 添加调试输出
         print(f"DEBUG - AVL Insert: value={v}")
@@ -254,6 +260,79 @@ class AVLModel(BaseStructure):
         
         return plan
 
+    def _ensure_insert_committed(self):
+        """确保真实树已经执行插入但尚未旋转"""
+        if self._insert_committed or self._new_value is None:
+            return
+        self.root = self._shadow_insert_no_rotate(self.root, self._new_value)
+        self._insert_committed = True
+
+    def has_pending_rotation(self):
+        """是否存在待执行的旋转计划"""
+        return bool(self._rotation_plan) and not self._rotation_applied
+
+    def apply_pending_rotation(self):
+        """执行待定的旋转计划，并在执行后清理计划"""
+        if not self.has_pending_rotation():
+            return False
+        
+        rotation_type = self._rotation_plan.get('type')
+        plan_nodes = self._rotation_plan.get('nodes') or []
+        pivot_value = plan_nodes[0] if plan_nodes else None
+        
+        if pivot_value is None or rotation_type is None:
+            self._rotation_applied = True
+            self._rotation_plan = None
+            return False
+        
+        self.root = self._apply_rotation_at_node(self.root, pivot_value, rotation_type)
+        self._rotation_applied = True
+        # 保留旋转信息用于阶段提示
+        self._rotation_type = rotation_type
+        self._rotation_nodes = plan_nodes
+        self._rotation_plan = None
+        self._refresh_heights(self.root)
+        return True
+
+    def _apply_rotation_at_node(self, node, target_value, rotation_type):
+        """在包含 target_value 的节点处执行指定类型的旋转"""
+        if not node:
+            return None
+        
+        if target_value < node.value:
+            node.left = self._apply_rotation_at_node(node.left, target_value, rotation_type)
+            self._update_height(node)
+            return node
+        if target_value > node.value:
+            node.right = self._apply_rotation_at_node(node.right, target_value, rotation_type)
+            self._update_height(node)
+            return node
+        
+        # 当前节点即为失衡节点
+        if rotation_type == 'LL':
+            return self._rotate_right(node)
+        if rotation_type == 'RR':
+            return self._rotate_left(node)
+        if rotation_type == 'LR':
+            if node.left:
+                node.left = self._rotate_left(node.left)
+            return self._rotate_right(node)
+        if rotation_type == 'RL':
+            if node.right:
+                node.right = self._rotate_right(node.right)
+            return self._rotate_left(node)
+        
+        return node
+
+    def _refresh_heights(self, node):
+        """重新计算整棵树的高度，确保旋转后数据一致"""
+        if not node:
+            return 0
+        left_height = self._refresh_heights(node.left)
+        right_height = self._refresh_heights(node.right)
+        node.height = 1 + max(left_height, right_height)
+        return node.height
+
     def _get_height(self, node):
         """获取节点高度"""
         if not node:
@@ -381,6 +460,7 @@ class AVLModel(BaseStructure):
     def clear(self):
         """清空树"""
         self.root = None
+        self.cancel_animation()
 
     def traverse_inorder(self):
         """中序遍历"""
@@ -403,6 +483,10 @@ class AVLModel(BaseStructure):
         self._animation_progress = max(0.0, min(1.0, progress))
         p1, p2, p3, p4 = self._phase_breaks
         prog = self._animation_progress
+
+        # 从阶段2开始，真实树需要展示插入后的未旋转状态
+        if prog >= p1:
+            self._ensure_insert_committed()
         
         # 阶段1：新节点路径比较/下落
         if prog < p1:
@@ -450,9 +534,12 @@ class AVLModel(BaseStructure):
             return
         
         # 阶段4：旋转细节动画（位置插值交由适配器处理）
-        if self._rotation_plan:
+        if self._rotation_plan and not self._rotation_applied:
             self._rotation_type = self._rotation_plan['type']
             self._rotation_nodes = self._rotation_plan['nodes']
+        elif self._rotation_applied and self._rotation_type:
+            # 已执行旋转，保持提示信息直到动画结束
+            self._rotation_nodes = getattr(self, "_rotation_nodes", [])
         else:
             self._rotation_type = None
             self._rotation_nodes = []
@@ -466,15 +553,26 @@ class AVLModel(BaseStructure):
             self._new_value = None
             self._animation_progress = 0.0
         elif self._animation_state == 'inserting' and self._new_value is not None:
-            # 执行实际的插入操作
-            self.root = self._insert_recursive(self.root, self._new_value)
+            # 确保真实结构已经包含新节点
+            self._ensure_insert_committed()
+            # 若旋转尚未执行，作为兜底在动画结束时执行
+            if self.has_pending_rotation():
+                self.apply_pending_rotation()
             
             self._animation_state = None
             self._new_value = None
             self._insert_path = []
             self._current_insert_step = 0
             self._insert_comparison_result = None
+            self._current_search_node_value = None
+            self._current_check_node_value = None
+            self._current_check_bf = None
+            self._rotation_plan = None
             self._animation_progress = 0.0
+            self._rotation_type = None
+            self._rotation_nodes = []
+            self._insert_committed = False
+            self._rotation_applied = False
 
     def cancel_animation(self):
         """取消动画"""
@@ -493,6 +591,8 @@ class AVLModel(BaseStructure):
         self._current_check_node_value = None
         self._current_check_bf = None
         self._rotation_plan = None
+        self._insert_committed = False
+        self._rotation_applied = False
 
     def update_animation_progress(self, progress):
         """更新动画进度"""
@@ -540,3 +640,5 @@ class AVLModel(BaseStructure):
         self._current_check_node_value = None
         self._current_check_bf = None
         self._rotation_plan = None
+        self._insert_committed = False
+        self._rotation_applied = False

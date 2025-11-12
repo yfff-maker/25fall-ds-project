@@ -3439,6 +3439,16 @@ class AVLAdapter:
         # 获取动画状态
         animation_state = getattr(avl, '_animation_state', None)
         animation_progress = getattr(avl, '_animation_progress', 0.0)
+        phase_breaks = getattr(avl, '_phase_breaks', (0.25, 0.5, 0.75, 1.0))
+        
+        # 在旋转阶段触发真实旋转以保持算法与动画同步
+        if animation_state == 'inserting':
+            rotation_phase = phase_breaks[2] if len(phase_breaks) >= 3 else 0.75
+            has_pending_rotation = getattr(avl, 'has_pending_rotation', None)
+            apply_rotation = getattr(avl, 'apply_pending_rotation', None)
+            if callable(has_pending_rotation) and callable(apply_rotation):
+                if has_pending_rotation() and animation_progress >= rotation_phase:
+                    apply_rotation()
         
         # 添加比较信息
         if animation_state == 'inserting' and hasattr(avl, '_insert_comparison_result') and avl._insert_comparison_result:
