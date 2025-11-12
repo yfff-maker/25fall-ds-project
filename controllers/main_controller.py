@@ -1081,21 +1081,24 @@ class MainController(QObject):
                 return
             
             structure = self._get_current_structure()
-            if structure:
-                # 开始删除动画
-                structure.delete(value)
-                
-                # 使用定时器实现平滑动画
-                from PyQt5.QtCore import QTimer
-                self._animation_timer = QTimer()
-                self._animation_timer.timeout.connect(lambda: self._update_bst_delete_animation(structure))
-                self._animation_timer.start(50)  # 每50ms更新一次
-                
-                # 设置动画总时长
-                self._animation_duration = 2000  # 2秒总时长（删除需要更多时间）
-                self._animation_start_time = 0
-                
-                self._update_snapshot()
+            if not structure:
+                self._show_warning("请先选择BST结构")
+                return
+            
+            # 开始删除动画
+            structure.delete(value)
+            
+            # 使用定时器实现平滑动画
+            from PyQt5.QtCore import QTimer
+            self._animation_timer = QTimer()
+            self._animation_timer.timeout.connect(lambda: self._update_bst_delete_animation(structure))
+            self._animation_timer.start(50)  # 每50ms更新一次
+            
+            # 设置动画总时长
+            self._animation_duration = 2000  # 2秒总时长（删除需要更多时间）
+            self._animation_start_time = 0
+            
+            self._update_snapshot()
         except Exception as e:
             self._show_error("删除失败", str(e))
     

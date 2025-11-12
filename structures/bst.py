@@ -147,7 +147,18 @@ class BSTModel(BaseStructure):
 
     def delete(self, value):
         """删除节点"""
-        if not self.active or value is None or self.root is None:
+        if not self.active or value is None:
+            return
+        
+        if self.root is None:
+            # 树为空，设置错误状态
+            self._animation_state = 'delete_not_found'
+            try:
+                v = float(value)
+            except:
+                v = value
+            self._delete_value = v
+            self._animation_progress = 0.0
             return
         
         try:
