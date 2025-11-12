@@ -17,7 +17,7 @@ from collections import deque
 from .adapters import (
     SequentialListAdapter, LinkedListAdapter, StackAdapter,
     BinaryTreeAdapter, BSTAdapter, AVLAdapter, HuffmanTreeAdapter,
-    StructureSnapshot
+    StructureSnapshot, center_snapshot
 )
 from .dsl_parser import DSLParser
 from .dsl_executor import DSLExecutor
@@ -147,6 +147,7 @@ class MainController(QObject):
             structure = self.structures[self.current_structure_key]
             adapter = self.adapters[self.current_structure_key]
             snapshot = adapter.to_snapshot(structure) # ← 创建：通过适配器创建 StructureSnapshot
+            snapshot = center_snapshot(snapshot)
             self.snapshot_updated.emit(snapshot)
     
     def _get_current_structure(self):

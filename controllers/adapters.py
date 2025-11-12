@@ -71,6 +71,100 @@ class StructureSnapshot:
         if self.operation_history is None:
             self.operation_history = []
 
+
+def center_snapshot(snapshot: StructureSnapshot,
+                    canvas_width: float = 1280,
+                    canvas_height: float = 720,
+                    margin: float = 40) -> StructureSnapshot:
+    """
+    调整快照内所有元素的位置，使其在指定画布范围内居中显示。
+    仅修改传入的 snapshot 并返回引用，方便链式调用。
+    """
+    if snapshot is None:
+        return snapshot
+
+    min_x = float('inf')
+    min_y = float('inf')
+    max_x = float('-inf')
+    max_y = float('-inf')
+
+    def _include_rect(x0: float, y0: float, w: float, h: float):
+        nonlocal min_x, min_y, max_x, max_y
+        min_x = min(min_x, x0)
+        min_y = min(min_y, y0)
+        max_x = max(max_x, x0 + w)
+        max_y = max(max_y, y0 + h)
+
+    def _include_point(x: Optional[float], y: Optional[float]):
+        if x is None or y is None:
+            return
+        _include_rect(x, y, 0, 0)
+
+    # 记录节点和方框的范围
+    for node in snapshot.nodes:
+        width = node.width if node.width is not None else (60 if node.node_type == "box" else 40)
+        height = node.height if node.height is not None else (40 if node.node_type == "box" else 40)
+        _include_rect(node.x, node.y, width, height)
+
+    for box in snapshot.boxes:
+        _include_rect(box.x, box.y, box.width, box.height)
+
+    # 边只包含线段坐标，按端点纳入边界
+    for edge in snapshot.edges:
+        _include_point(getattr(edge, "from_x", None), getattr(edge, "from_y", None))
+        _include_point(getattr(edge, "to_x", None), getattr(edge, "to_y", None))
+
+    if min_x == float('inf') or min_y == float('inf'):
+        # 没有任何可视元素，直接返回
+        return snapshot
+
+    content_width = max_x - min_x
+    content_height = max_y - min_y
+    if content_width == 0 and content_height == 0:
+        return snapshot
+
+    canvas_center_x = canvas_width / 2.0
+    canvas_center_y = canvas_height / 2.0
+    content_center_x = min_x + content_width / 2.0
+    content_center_y = min_y + content_height / 2.0
+
+    offset_x = canvas_center_x - content_center_x
+    offset_y = canvas_center_y - content_center_y
+
+    # 保证内容不会越过边缘（在可行的情况下保留 margin）
+    def _clamp_offset(offset, min_coord, max_coord, limit_min, limit_max):
+        after_min = min_coord + offset
+        after_max = max_coord + offset
+        if after_min < limit_min:
+            offset += limit_min - after_min
+            after_max = max_coord + offset
+        if after_max > limit_max:
+            offset -= after_max - limit_max
+        return offset
+
+    offset_x = _clamp_offset(offset_x, min_x, max_x, margin, canvas_width - margin)
+    offset_y = _clamp_offset(offset_y, min_y, max_y, margin, canvas_height - margin)
+
+    for node in snapshot.nodes:
+        node.x += offset_x
+        node.y += offset_y
+
+    for box in snapshot.boxes:
+        box.x += offset_x
+        box.y += offset_y
+
+    for edge in snapshot.edges:
+        if hasattr(edge, "from_x") and edge.from_x is not None:
+            edge.from_x += offset_x
+        if hasattr(edge, "to_x") and edge.to_x is not None:
+            edge.to_x += offset_x
+        if hasattr(edge, "from_y") and edge.from_y is not None:
+            edge.from_y += offset_y
+        if hasattr(edge, "to_y") and edge.to_y is not None:
+            edge.to_y += offset_y
+
+    return snapshot
+
 class SequentialListAdapter:
     """顺序表适配器"""
     
