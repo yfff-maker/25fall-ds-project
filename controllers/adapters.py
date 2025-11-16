@@ -1317,6 +1317,8 @@ class BinaryTreeAdapter:
         
         node_x, node_y = positions[node]
         node_id = f"node_{id(node)}"
+        radius = AVLAdapter.NODE_RADIUS
+        radius = BSTAdapter.NODE_RADIUS
         
         # 添加到左子节点的边
         if node.left:
@@ -1389,24 +1391,13 @@ class BinaryTreeAdapter:
                           str(binary_tree._new_value) == str(node.value))
             
             if is_new_node:
-                # 新节点动画效果
                 target_x, target_y = x, y_pos
                 start_x_anim = x
-                start_y_anim = 50  # 从屏幕上方开始
-                
-                # 使用动画进度插值
+                start_y_anim = 50
                 current_x = start_x_anim + (target_x - start_x_anim) * animation_progress
                 current_y = start_y_anim + (target_y - start_y_anim) * animation_progress
-                
-                node_snapshot = NodeSnapshot(
-                    id=node_id,
-                    value=str(node.value),
-                    x=current_x - 30,  # 节点中心对齐
-                    y=current_y - 20,
-                    node_type="box",
-                    width=60,
-                    height=40,
-                    color="#FF6B6B"  # 红色表示正在插入的节点
+                node_snapshot = BSTAdapter._circle_snapshot(
+                    node_id, str(node.value), current_x, current_y, "#FF6B6B"
                 )
             else:
                 node_snapshot = NodeSnapshot(
@@ -1527,6 +1518,22 @@ class BinaryTreeAdapter:
 
 class BSTAdapter:
     """二叉搜索树适配器 - 使用与链式二叉树相同的布局算法"""
+    NODE_DIAMETER = 60
+    NODE_RADIUS = NODE_DIAMETER / 2
+    
+    @staticmethod
+    def _circle_snapshot(node_id, value, center_x, center_y, color, text_color="#FFFFFF"):
+        return NodeSnapshot(
+            id=node_id,
+            value=value,
+            x=center_x,
+            y=center_y,
+            node_type="circle",
+            width=BSTAdapter.NODE_DIAMETER,
+            height=BSTAdapter.NODE_DIAMETER,
+            color=color,
+            text_color=text_color
+        )
     
     @staticmethod
     def _calculate_subtree_width(node, node_width=60, min_spacing=100):
@@ -1624,11 +1631,10 @@ class BSTAdapter:
                 color="#2E86AB",
                 arrow_type="line"
             )
-            # 设置连线坐标 - 从红色左指针方框出发，连接到子节点中心
-            edge.from_x = node_x - 60  # 左指针方框位置
-            edge.from_y = node_y - 30  # 左指针方框位置（稍微偏下）
-            edge.to_x = left_x - 40  # 子节点中心x坐标
-            edge.to_y = left_y - 10  # 子节点中心y坐标（稍微偏上）
+            edge.from_x = node_x
+            edge.from_y = node_y + BSTAdapter.NODE_RADIUS
+            edge.to_x = left_x
+            edge.to_y = left_y - BSTAdapter.NODE_RADIUS
             
             snapshot.edges.append(edge)
             
@@ -1646,11 +1652,10 @@ class BSTAdapter:
                 color="#2E86AB",
                 arrow_type="line"
             )
-            # 设置连线坐标 - 从绿色右指针方框出发，连接到子节点中心
-            edge.from_x = node_x  # 右指针方框位置
-            edge.from_y = node_y - 30  # 右指针方框位置
-            edge.to_x = right_x - 40  # 子节点中心x坐标
-            edge.to_y = right_y - 10  # 子节点中心y坐标（稍微偏下）
+            edge.from_x = node_x
+            edge.from_y = node_y + BSTAdapter.NODE_RADIUS
+            edge.to_x = right_x
+            edge.to_y = right_y - BSTAdapter.NODE_RADIUS
             
             snapshot.edges.append(edge)
             
@@ -1658,7 +1663,7 @@ class BSTAdapter:
             BSTAdapter._add_edges(node.right, positions, snapshot)
     
     @staticmethod
-    def to_snapshot(bst, start_x=640, y=200, level_height=80, node_width=60, min_spacing=100) -> StructureSnapshot:
+    def to_snapshot(bst, start_x=640, y=200, level_height=120, node_width=60, min_spacing=100) -> StructureSnapshot:
         """将BST转换为快照 - 使用与链式二叉树相同的布局算法"""
         snapshot = StructureSnapshot()
         snapshot.hint_text = f"二叉搜索树 (节点数: {len(bst.traverse_inorder())})"
@@ -1720,15 +1725,8 @@ class BSTAdapter:
                 current_y = start_y_pos + (target_y - start_y_pos) * animation_progress
                 
                 # 创建动画中的根节点
-                node_snapshot = NodeSnapshot(
-                    id="animating_root",
-                    value=str(new_value),
-                    x=current_x - 30,
-                    y=current_y - 20,
-                    node_type="box",
-                    width=60,
-                    height=40,
-                    color="#FF6B6B"  # 红色表示正在移动
+                node_snapshot = BSTAdapter._circle_snapshot(
+                    "animating_root", str(new_value), current_x, current_y, "#FF6B6B"
                 )
                 snapshot.nodes.append(node_snapshot)
                 
@@ -1755,7 +1753,7 @@ class BSTAdapter:
                 root_edge.from_x = root_pointer_x + 30
                 root_edge.from_y = root_pointer_y + 30
                 root_edge.to_x = current_x
-                root_edge.to_y = current_y - 20
+                root_edge.to_y = current_y - BSTAdapter.NODE_RADIUS
                 snapshot.edges.append(root_edge)
         
         if not bst.root:
@@ -1822,88 +1820,32 @@ class BSTAdapter:
                     color="#FF6B6B"  # 红色表示正在插入的节点
                 )
             elif is_searching_node or is_insert_comparing_node:
-                # 当前正在比较的节点 - 黄色
-                node_snapshot = NodeSnapshot(
-                    id=node_id,
-                    value=str(node.value),
-                    x=x - 30,  # 节点中心对齐
-                    y=y_pos - 20,
-                    node_type="box",
-                    width=60,
-                    height=40,
-                    color="#FFD700"  # 黄色表示正在比较
+                node_snapshot = BSTAdapter._circle_snapshot(
+                    node_id, str(node.value), x, y_pos, "#FFD700"
                 )
             elif is_found_node:
-                # 找到的目标节点 - 绿色
-                node_snapshot = NodeSnapshot(
-                    id=node_id,
-                    value=str(node.value),
-                    x=x - 30,  # 节点中心对齐
-                    y=y_pos - 20,
-                    node_type="box",
-                    width=60,
-                    height=40,
-                    color="#00FF00"  # 绿色表示找到
+                node_snapshot = BSTAdapter._circle_snapshot(
+                    node_id, str(node.value), x, y_pos, "#00FF00"
                 )
             elif is_last_searched_node:
-                # 最后搜索的节点（未找到时）- 橙色
-                node_snapshot = NodeSnapshot(
-                    id=node_id,
-                    value=str(node.value),
-                    x=x - 30,  # 节点中心对齐
-                    y=y_pos - 20,
-                    node_type="box",
-                    width=60,
-                    height=40,
-                    color="#FFA500"  # 橙色表示最后搜索
+                node_snapshot = BSTAdapter._circle_snapshot(
+                    node_id, str(node.value), x, y_pos, "#FFA500"
                 )
             elif is_deleting_node:
-                # 当前正在比较的删除节点 - 黄色
-                node_snapshot = NodeSnapshot(
-                    id=node_id,
-                    value=str(node.value),
-                    x=x - 30,  # 节点中心对齐
-                    y=y_pos - 20,
-                    node_type="box",
-                    width=60,
-                    height=40,
-                    color="#FFD700"  # 黄色表示正在比较
+                node_snapshot = BSTAdapter._circle_snapshot(
+                    node_id, str(node.value), x, y_pos, "#FFD700"
                 )
             elif is_delete_target_node:
-                # 要删除的目标节点 - 红色
-                node_snapshot = NodeSnapshot(
-                    id=node_id,
-                    value=str(node.value),
-                    x=x - 30,  # 节点中心对齐
-                    y=y_pos - 20,
-                    node_type="box",
-                    width=60,
-                    height=40,
-                    color="#FF0000"  # 红色表示要删除的节点
+                node_snapshot = BSTAdapter._circle_snapshot(
+                    node_id, str(node.value), x, y_pos, "#FF0000"
                 )
             elif is_delete_replacement_node:
-                # 替换节点（两子节点情况）- 蓝色
-                node_snapshot = NodeSnapshot(
-                    id=node_id,
-                    value=str(node.value),
-                    x=x - 30,  # 节点中心对齐
-                    y=y_pos - 20,
-                    node_type="box",
-                    width=60,
-                    height=40,
-                    color="#0000FF"  # 蓝色表示替换节点
+                node_snapshot = BSTAdapter._circle_snapshot(
+                    node_id, str(node.value), x, y_pos, "#0000FF"
                 )
             else:
-                # 普通节点 - 深蓝色
-                node_snapshot = NodeSnapshot(
-                    id=node_id,
-                    value=str(node.value),
-                    x=x - 30,  # 节点中心对齐
-                    y=y_pos - 20,
-                    node_type="box",
-                    width=60,
-                    height=40,
-                    color="#1f4e79"  # 深蓝色
+                node_snapshot = BSTAdapter._circle_snapshot(
+                    node_id, str(node.value), x, y_pos, "#1f4e79"
                 )
             
             snapshot.nodes.append(node_snapshot)
@@ -1935,7 +1877,7 @@ class BSTAdapter:
             root_edge.from_x = root_pointer_x + 30  # 从root标签中心
             root_edge.from_y = root_pointer_y + 30  # 从root标签底部
             root_edge.to_x = start_x  # 到根节点中心
-            root_edge.to_y = y - 20  # 到根节点顶部
+            root_edge.to_y = y - BSTAdapter.NODE_RADIUS  # 到根节点顶部
             snapshot.edges.append(root_edge)
         
         # 处理插入节点动画
@@ -1970,12 +1912,12 @@ class BSTAdapter:
                     node_snapshot = NodeSnapshot(
                         id="animating_insert",
                         value=str(new_value),
-                        x=current_x - 30,
-                        y=current_y - 20,
-                        node_type="box",
-                        width=60,
-                        height=40,
-                        color="#FF6B6B"  # 红色表示正在移动
+                        x=current_x,
+                        y=current_y,
+                        node_type="circle",
+                        width=BSTAdapter.NODE_DIAMETER,
+                        height=BSTAdapter.NODE_DIAMETER,
+                        color="#FF6B6B"
                     )
                     snapshot.nodes.append(node_snapshot)
         
@@ -3484,6 +3426,22 @@ class HuffmanTreeAdapter:
 
 class AVLAdapter:
     """AVL树适配器 - 支持平衡因子显示和旋转动画"""
+    NODE_DIAMETER = 60
+    NODE_RADIUS = NODE_DIAMETER / 2
+    
+    @staticmethod
+    def _circle_snapshot(node_id, value, center_x, center_y, color, text_color="#FFFFFF"):
+        return NodeSnapshot(
+            id=node_id,
+            value=value,
+            x=center_x,
+            y=center_y,
+            node_type="circle",
+            width=AVLAdapter.NODE_DIAMETER,
+            height=AVLAdapter.NODE_DIAMETER,
+            color=color,
+            text_color=text_color
+        )
     
     @staticmethod
     def _rotate_point(cx, cy, x, y, theta_rad):
@@ -3593,11 +3551,10 @@ class AVLAdapter:
                 color="#2E86AB",
                 arrow_type="line"
             )
-            # 设置连线坐标 - 从红色左指针方框出发，连接到子节点中心
-            edge.from_x = node_x - 60  # 左指针方框位置
-            edge.from_y = node_y - 30  # 左指针方框位置（稍微偏下）
-            edge.to_x = left_x - 40  # 子节点中心x坐标
-            edge.to_y = left_y - 10  # 子节点中心y坐标（稍微偏上）
+            edge.from_x = node_x
+            edge.from_y = node_y + AVLAdapter.NODE_RADIUS
+            edge.to_x = left_x
+            edge.to_y = left_y - AVLAdapter.NODE_RADIUS
             
             snapshot.edges.append(edge)
             
@@ -3615,11 +3572,10 @@ class AVLAdapter:
                 color="#2E86AB",
                 arrow_type="line"
             )
-            # 设置连线坐标 - 从绿色右指针方框出发，连接到子节点中心
-            edge.from_x = node_x  # 右指针方框位置
-            edge.from_y = node_y - 30  # 右指针方框位置
-            edge.to_x = right_x - 40  # 子节点中心x坐标
-            edge.to_y = right_y - 10  # 子节点中心y坐标（稍微偏下）
+            edge.from_x = node_x
+            edge.from_y = node_y + AVLAdapter.NODE_RADIUS
+            edge.to_x = right_x
+            edge.to_y = right_y - AVLAdapter.NODE_RADIUS
             
             snapshot.edges.append(edge)
             
@@ -3627,7 +3583,7 @@ class AVLAdapter:
             AVLAdapter._add_edges(node.right, positions, snapshot)
     
     @staticmethod
-    def to_snapshot(avl, start_x=640, y=200, level_height=80, node_width=60, min_spacing=100) -> StructureSnapshot:
+    def to_snapshot(avl, start_x=640, y=200, level_height=120, node_width=60, min_spacing=100) -> StructureSnapshot:
         """将AVL树转换为快照 - 支持平衡因子显示和旋转动画"""
         snapshot = StructureSnapshot()
         snapshot.hint_text = f"AVL平衡二叉树 (节点数: {len(avl.traverse_inorder())})"
@@ -3710,15 +3666,12 @@ class AVLAdapter:
             # 使用 positions 中已更新的位置（如果节点参与了旋转，位置已在前面更新）
             current_x, current_y = x, y_pos
             
-            node_snapshot = NodeSnapshot(
-                id=node_id,
-                value=str(node.value),
-                x=current_x - 30,  # 节点中心对齐
-                y=current_y - 20,
-                node_type="box",
-                width=60,
-                height=40,
-                color=node_color
+            node_snapshot = AVLAdapter._circle_snapshot(
+                node_id,
+                str(node.value),
+                current_x,
+                current_y,
+                node_color
             )
             
             # 添加边框颜色属性（检查节点保留金色边框）
@@ -3737,9 +3690,9 @@ class AVLAdapter:
                 id=f"balance_{node_id}",
                 value=bf_text,
                 x=current_x + 50,  # 节点右侧
-                y=current_y - 10,  # 节点上方
-                width=80,
-                height=28,
+                y=current_y - 8,  # 节点上方
+                width=48,
+                height=24,
                 color="#8B4513" if abs(balance_factor) <= 1 else "#FF6B6B",  # 褐色正常，红色失衡
                 text_color="#FFFFFF"
             )
@@ -3773,7 +3726,7 @@ class AVLAdapter:
         root_arrow.from_x = root_pointer_x + 30
         root_arrow.from_y = root_pointer_y + 30
         root_arrow.to_x = start_x
-        root_arrow.to_y = y - 20
+        root_arrow.to_y = y - AVLAdapter.NODE_RADIUS
         snapshot.edges.append(root_arrow)
         
         return snapshot
