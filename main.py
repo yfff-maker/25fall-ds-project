@@ -100,6 +100,8 @@ class MainWindow(QMainWindow):
             # LLM线程管理
             self._llm_thread = None
             self._chat_pending_text = None
+            self._dsl_executing = False
+            self.btn_execute_dsl = None
             
             # 连接控制器信号
             self.controller.snapshot_updated.connect(self.canvas.render_snapshot)
@@ -157,18 +159,18 @@ class MainWindow(QMainWindow):
         
         # DSL操作按钮
         dsl_btn_layout = QHBoxLayout()
-        btn_execute_dsl = QPushButton("执行")
-        btn_execute_dsl.clicked.connect(self._handle_execute_dsl)
+        self.btn_execute_dsl = QPushButton("执行")
+        self.btn_execute_dsl.clicked.connect(self._handle_execute_dsl)
         btn_clear_dsl = QPushButton("清空")
         btn_clear_dsl.clicked.connect(self._handle_clear_dsl)
         btn_load_dsl = QPushButton("从文件导入")
         btn_load_dsl.clicked.connect(self._handle_load_dsl_file)
-        for btn in (btn_execute_dsl, btn_clear_dsl, btn_load_dsl):
+        for btn in (self.btn_execute_dsl, btn_clear_dsl, btn_load_dsl):
             btn.setProperty("buttonType", "structure-secondary")
             btn.style().unpolish(btn)
             btn.style().polish(btn)
         
-        dsl_btn_layout.addWidget(btn_execute_dsl)
+        dsl_btn_layout.addWidget(self.btn_execute_dsl)
         dsl_btn_layout.addWidget(btn_clear_dsl)
         dsl_btn_layout.addWidget(btn_load_dsl)
         gdsl.addLayout(dsl_btn_layout)
@@ -692,23 +694,23 @@ class MainWindow(QMainWindow):
         if not script_text:
             QMessageBox.warning(self, "提示", "请输入DSL命令")
             return
+        if self._dsl_executing:
+            QMessageBox.information(self, "提示", "当前已有DSL命令在执行，请稍候。")
+            return
         
+        self._set_dsl_running_state(True)
         try:
-            # 批量执行DSL脚本
-            success_count, fail_count, messages = self.controller.execute_dsl_script(script_text)
-            
-            # 显示执行结果
-            result_msg = f"成功: {success_count}条, 失败: {fail_count}条"
-            self.dsl_result_label.setText(result_msg)
-            
-            # 如果有失败的命令,显示详细消息
-            if fail_count > 0:
-                error_details = "\n".join([msg for msg in messages if msg.startswith("✗")])
-                QMessageBox.warning(self, "执行结果", f"{result_msg}\n\n失败的命令:\n{error_details}")
-            else:
-                QMessageBox.information(self, "执行成功", result_msg)
-                
+            started = self.controller.execute_dsl_script(
+                script_text,
+                sequential=True,
+                progress_callback=self._on_dsl_progress,
+                finished_callback=self._on_dsl_finished,
+            )
+            if started is False:
+                # 没有可执行的命令，finished_callback 已处理
+                self._set_dsl_running_state(False)
         except Exception as e:
+            self._set_dsl_running_state(False)
             QMessageBox.critical(self, "执行失败", f"DSL执行出错: {str(e)}")
             self.dsl_result_label.setText(f"错误: {str(e)}")
     
@@ -735,6 +737,30 @@ class MainWindow(QMainWindow):
             self.dsl_result_label.setText(f"已加载: {path}")
         except Exception as e:
             QMessageBox.critical(self, "加载失败", f"无法读取文件: {str(e)}")
+    
+    def _set_dsl_running_state(self, running: bool):
+        self._dsl_executing = running
+        if self.btn_execute_dsl:
+            self.btn_execute_dsl.setEnabled(not running)
+        if running:
+            self.dsl_result_label.setText("DSL命令执行中...")
+    
+    def _on_dsl_progress(self, current: int, total: int, success: bool, message: str):
+        self.dsl_result_label.setText(f"执行进度：{current}/{total}")
+    
+    def _on_dsl_finished(self, success_count: int, fail_count: int, messages: list):
+        self._set_dsl_running_state(False)
+        result_msg = f"成功: {success_count}条, 失败: {fail_count}条"
+        if success_count == 0 and fail_count == 0 and not messages:
+            self.dsl_result_label.setText("没有可执行的DSL命令")
+            QMessageBox.information(self, "提示", "未找到可执行的DSL命令")
+            return
+        self.dsl_result_label.setText(result_msg)
+        if fail_count > 0:
+            error_details = "\n".join([msg for msg in messages if msg.startswith("✗")]) or "\n".join(messages)
+            QMessageBox.warning(self, "执行结果", f"{result_msg}\n\n失败的命令:\n{error_details}")
+        else:
+            QMessageBox.information(self, "执行成功", result_msg)
     
     def _action_natural_language(self):
         """打开自然语言操作对话框"""

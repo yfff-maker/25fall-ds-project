@@ -4,6 +4,7 @@ DSL执行器模块
 负责执行解析后的DSL命令,调用MainController的相应方法
 """
 from typing import List, Tuple
+from PyQt5.QtCore import QTimer
 from .dsl_parser import ParsedCommand, CommandType
 
 
@@ -18,6 +19,15 @@ class DSLExecutor:
             controller: MainController实例
         """
         self.controller = controller
+        self._sequential_queue: List[ParsedCommand] = []
+        self._seq_total = 0
+        self._seq_index = 0
+        self._seq_success = 0
+        self._seq_fail = 0
+        self._seq_messages: List[str] = []
+        self._seq_progress_callback = None
+        self._seq_finished_callback = None
+        self._sequential_running = False
     
     def execute(self, command: ParsedCommand) -> Tuple[bool, str]:
         """
@@ -192,4 +202,80 @@ class DSLExecutor:
                 errors.append(f"✗ 命令 {i}: {cmd.original_text} - {message}")
         
         return success_count, fail_count, errors
+
+    def execute_script_sequential(
+        self,
+        commands: List[ParsedCommand],
+        progress_callback=None,
+        finished_callback=None,
+    ) -> bool:
+        """按顺序执行命令，等待动画完成后再运行下一条"""
+        if self._sequential_running:
+            raise RuntimeError("已有DSL批量执行任务正在进行")
+
+        actionable = [cmd for cmd in commands if cmd.type != CommandType.UNKNOWN]
+        if not actionable:
+            if finished_callback:
+                finished_callback(0, 0, [])
+            return False
+
+        self._sequential_queue = actionable
+        self._seq_total = len(actionable)
+        self._seq_index = 0
+        self._seq_success = 0
+        self._seq_fail = 0
+        self._seq_messages = []
+        self._seq_progress_callback = progress_callback
+        self._seq_finished_callback = finished_callback
+        self._sequential_running = True
+        self._process_next_command()
+        return True
+
+    def _process_next_command(self):
+        if not self._sequential_running:
+            return
+
+        if self.controller.is_busy():
+            QTimer.singleShot(150, self._process_next_command)
+            return
+
+        if not self._sequential_queue:
+            self._finish_sequential_execution()
+            return
+
+        cmd = self._sequential_queue.pop(0)
+        self._seq_index += 1
+        success, message = self.execute(cmd)
+        if success:
+            self._seq_success += 1
+            entry = f"✓ 命令 {self._seq_index}: {cmd.original_text}"
+        else:
+            self._seq_fail += 1
+            entry = f"✗ 命令 {self._seq_index}: {cmd.original_text} - {message}"
+        self._seq_messages.append(entry)
+
+        if self._seq_progress_callback:
+            self._seq_progress_callback(
+                self._seq_index,
+                self._seq_total,
+                success,
+                entry,
+            )
+
+        # 等待可能的动画执行完毕
+        QTimer.singleShot(150, self._process_next_command)
+
+    def _finish_sequential_execution(self):
+        if not self._sequential_running:
+            return
+        self._sequential_running = False
+        if self._seq_finished_callback:
+            self._seq_finished_callback(
+                self._seq_success,
+                self._seq_fail,
+                list(self._seq_messages),
+            )
+        self._sequential_queue = []
+        self._seq_progress_callback = None
+        self._seq_finished_callback = None
 

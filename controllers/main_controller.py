@@ -4,7 +4,7 @@
 """
 from typing import Dict, Any, Optional, List, Tuple
 from PyQt5.QtWidgets import QMessageBox, QDialog
-from PyQt5.QtCore import QObject, pyqtSignal
+from PyQt5.QtCore import QObject, pyqtSignal, QTimer
 
 from structures.sequential_list import SequentialListModel
 from structures.linked_list import LinkedListModel
@@ -82,6 +82,7 @@ class MainController(QObject):
         # 初始化LLM服务和动作执行器
         self.llm_service = LLMService()
         self.action_executor = ActionExecutor(self)
+        self._animation_timer: Optional[QTimer] = None
         self.current_llm_model: Optional[str] = self.llm_service.default_model
         
         self._update_snapshot()
@@ -159,6 +160,36 @@ class MainController(QObject):
         """获取当前适配器"""
         return self.adapters.get(self.current_structure_key)
     
+    def is_busy(self) -> bool:
+        """判断是否仍有动画或批量任务在执行"""
+        if self._animation_timer and self._animation_timer.isActive():
+            return True
+        if getattr(self, "_bst_build_queue", None):
+            if len(self._bst_build_queue) > 0:
+                return True
+        if getattr(self, "_avl_build_queue", None):
+            if len(self._avl_build_queue) > 0:
+                return True
+        huffman_queue = getattr(self, "_huffman_queue", None)
+        if huffman_queue and len(huffman_queue) > 1:
+            huffman_struct = self.structures.get("HuffmanTree")
+            if huffman_struct and getattr(huffman_struct, "_animation_state", None) == "huffman_merging":
+                return True
+        return False
+    
+    def _restart_animation_timer(self, callback, interval: int = 50):
+        """停止旧定时器并以新的回调/间隔重新启动"""
+        if self._animation_timer is None:
+            self._animation_timer = QTimer(self)
+        else:
+            self._animation_timer.stop()
+            try:
+                self._animation_timer.timeout.disconnect()
+            except TypeError:
+                pass
+        self._animation_timer.timeout.connect(callback)
+        self._animation_timer.start(interval)
+    
     # ========== 顺序表操作 ==========
     
     def build_sequential_list(self, input_text: str):
@@ -182,12 +213,7 @@ class MainController(QObject):
                 self._update_snapshot()
                 
                 # 使用定时器实现平滑动画
-                from PyQt5.QtCore import QTimer
-                
-                # 创建动画定时器
-                self._animation_timer = QTimer()
-                self._animation_timer.timeout.connect(lambda: self._update_sequential_animation(structure))
-                self._animation_timer.start(50)  # 每50ms更新一次，实现平滑效果
+                self._restart_animation_timer(lambda: self._update_sequential_animation(structure), 50)
                 
                 # 设置动画总时长
                 self._animation_duration = 1000  # 1秒总时长
@@ -206,12 +232,7 @@ class MainController(QObject):
                 self._update_snapshot()
                 
                 # 使用定时器实现平滑动画
-                from PyQt5.QtCore import QTimer
-                
-                # 创建动画定时器
-                self._animation_timer = QTimer()
-                self._animation_timer.timeout.connect(lambda: self._update_sequential_animation(structure))
-                self._animation_timer.start(50)  # 每50ms更新一次，实现平滑效果
+                self._restart_animation_timer(lambda: self._update_sequential_animation(structure), 50)
                 
                 # 设置动画总时长
                 self._animation_duration = 1000  # 1秒总时长
@@ -254,7 +275,6 @@ class MainController(QObject):
             elif structure._animation_state == 'deleting':
                 structure.complete_delete_animation()
             self._update_snapshot()
-            self._animation_timer.deleteLater()
     
     # ========== 链表操作 ==========
     
@@ -269,12 +289,7 @@ class MainController(QObject):
                 self._update_snapshot()
                 
                 # 使用定时器实现平滑动画
-                from PyQt5.QtCore import QTimer
-                
-                # 创建动画定时器
-                self._animation_timer = QTimer()
-                self._animation_timer.timeout.connect(lambda: self._update_linked_list_animation(structure))
-                self._animation_timer.start(50)  # 每50ms更新一次，实现平滑效果
+                self._restart_animation_timer(lambda: self._update_linked_list_animation(structure), 50)
                 
                 # 设置动画总时长
                 self._animation_duration = 1000  # 1秒总时长
@@ -292,12 +307,7 @@ class MainController(QObject):
                 self._update_snapshot()
                 
                 # 使用定时器实现平滑动画
-                from PyQt5.QtCore import QTimer
-                
-                # 创建动画定时器
-                self._animation_timer = QTimer()
-                self._animation_timer.timeout.connect(lambda: self._update_linked_list_animation(structure))
-                self._animation_timer.start(100)  # 每100ms更新一次，实现平滑效果
+                self._restart_animation_timer(lambda: self._update_linked_list_animation(structure), 100)
                 
                 # 设置动画总时长
                 self._animation_duration = 2000  # 2秒总时长
@@ -315,12 +325,7 @@ class MainController(QObject):
                 self._update_snapshot()
                 
                 # 使用定时器实现平滑动画
-                from PyQt5.QtCore import QTimer
-                
-                # 创建动画定时器
-                self._animation_timer = QTimer()
-                self._animation_timer.timeout.connect(lambda: self._update_linked_list_animation(structure))
-                self._animation_timer.start(100)  # 放慢：每 100ms 更新一帧
+                self._restart_animation_timer(lambda: self._update_linked_list_animation(structure), 100)
                 
                 # 设置动画总时长
                 self._animation_duration = 2000  # 放慢：动画总时长 2000ms
@@ -369,12 +374,7 @@ class MainController(QObject):
                     return
                 
                 # 使用定时器实现平滑动画
-                from PyQt5.QtCore import QTimer
-                
-                # 创建动画定时器
-                self._animation_timer = QTimer()
-                self._animation_timer.timeout.connect(lambda: self._update_smooth_animation(structure))
-                self._animation_timer.start(50)  # 每50ms更新一次，实现平滑效果
+                self._restart_animation_timer(lambda: self._update_smooth_animation(structure), 50)
                 
                 # 设置动画总时长
                 self._animation_duration = 1000  # 1秒总时长
@@ -408,7 +408,6 @@ class MainController(QObject):
             elif structure._animation_state == 'popping':
                 structure.complete_pop_animation()
             self._update_snapshot()
-            self._animation_timer.deleteLater()
     
     def _update_stack_animation(self, structure):
         """更新栈动画（入栈和出栈）"""
@@ -435,7 +434,6 @@ class MainController(QObject):
             elif structure._animation_state == 'popping':
                 structure.complete_pop_animation()
             self._update_snapshot()
-            self._animation_timer.deleteLater()
     
     def _update_binary_tree_animation(self, structure):
         """更新二叉树动画"""
@@ -482,7 +480,6 @@ class MainController(QObject):
             
             # 最终更新显示
             self._update_snapshot()
-            self._animation_timer.deleteLater()
     
     def _update_bst_animation(self, structure):
         """更新BST动画"""
@@ -521,18 +518,18 @@ class MainController(QObject):
             # 最终更新显示
             self._update_snapshot()
             
-            # 保存队列状态，因为deleteLater()后可能会影响self引用
+            # 保存队列状态，稍后继续执行队列
             has_next = bool(self._bst_build_queue)
             
             # 清理定时器
             old_timer = self._animation_timer
             self._animation_timer = None  # 先清空引用
-            old_timer.deleteLater()
+            if old_timer is not None:
+                old_timer.stop()
             
             # 检查是否有待插入的BST节点（批量构建）
             # 使用QTimer.singleShot延迟一小段时间，确保前一个定时器完全清理
             if has_next:
-                from PyQt5.QtCore import QTimer
                 QTimer.singleShot(100, self._insert_next_bst_value)
     
     def _insert_next_bst_value(self):
@@ -555,7 +552,6 @@ class MainController(QObject):
             # 异常时继续处理队列，不中断批量构建
             self._show_error("插入节点失败", str(e))
             if self._avl_build_queue:
-                from PyQt5.QtCore import QTimer
                 QTimer.singleShot(100, self._insert_next_avl_value)
     
     def build_bst(self, values):
@@ -599,13 +595,10 @@ class MainController(QObject):
                 self._show_error("构建失败", "AVL结构不存在")
                 return
             
-            # 如果已有批量构建在进行，先停止并清理
-            if hasattr(self, '_animation_timer') and self._animation_timer is not None:
-                try:
-                    self._animation_timer.stop()
-                    self._animation_timer.deleteLater()
-                except:
-                    pass
+            # 如果已有批量构建在进行，先停止当前动画
+            timer = getattr(self, '_animation_timer', None)
+            if timer is not None:
+                timer.stop()
                 self._animation_timer = None
             
             # 初始化队列
@@ -625,12 +618,9 @@ class MainController(QObject):
             self._show_error("构建失败", str(e))
             self._avl_build_queue = []  # 清空队列
             # 清理定时器
-            if hasattr(self, '_animation_timer') and self._animation_timer is not None:
-                try:
-                    self._animation_timer.stop()
-                    self._animation_timer.deleteLater()
-                except:
-                    pass
+            timer = getattr(self, '_animation_timer', None)
+            if timer is not None:
+                timer.stop()
                 self._animation_timer = None
     
     def pop_stack(self):
@@ -643,12 +633,7 @@ class MainController(QObject):
                 self._update_snapshot()
                 
                 # 使用定时器实现平滑动画
-                from PyQt5.QtCore import QTimer
-                
-                # 创建动画定时器
-                self._animation_timer = QTimer()
-                self._animation_timer.timeout.connect(lambda: self._update_stack_animation(structure))
-                self._animation_timer.start(50)  # 每50ms更新一次，实现平滑效果
+                self._restart_animation_timer(lambda: self._update_stack_animation(structure), 50)
                 
                 # 设置动画总时长
                 self._animation_duration = 1000  # 1秒总时长
@@ -683,12 +668,7 @@ class MainController(QObject):
                     return
                 
                 # 使用定时器实现平滑动画
-                from PyQt5.QtCore import QTimer
-                
-                # 创建动画定时器
-                self._animation_timer = QTimer()
-                self._animation_timer.timeout.connect(lambda: self._update_stack_build_animation(structure))
-                self._animation_timer.start(50)  # 每50ms更新一次，实现平滑效果
+                self._restart_animation_timer(lambda: self._update_stack_build_animation(structure), 50)
                 
                 # 设置动画总时长
                 self._animation_duration = 1000  # 1秒总时长
@@ -729,7 +709,6 @@ class MainController(QObject):
             if structure._animation_state == 'building':
                 structure.complete_build_animation()
             self._update_snapshot()
-            self._animation_timer.deleteLater()
     
     # ========== 二叉树操作 ==========
     
@@ -753,10 +732,7 @@ class MainController(QObject):
                 structure._new_node = None  # 根节点还没有创建
                 
                 # 使用定时器实现平滑动画
-                from PyQt5.QtCore import QTimer
-                self._animation_timer = QTimer()
-                self._animation_timer.timeout.connect(lambda: self._update_binary_tree_animation(structure))
-                self._animation_timer.start(50)  # 每50ms更新一次
+                self._restart_animation_timer(lambda: self._update_binary_tree_animation(structure), 50)
                 
                 # 设置动画总时长
                 self._animation_duration = 1000  # 1秒总时长
@@ -782,10 +758,7 @@ class MainController(QObject):
                     structure.start_insert_animation(value, parent_value, position)
                     
                     # 使用定时器实现平滑动画
-                    from PyQt5.QtCore import QTimer
-                    self._animation_timer = QTimer()
-                    self._animation_timer.timeout.connect(lambda: self._update_binary_tree_animation(structure))
-                    self._animation_timer.start(50)  # 每50ms更新一次
+                    self._restart_animation_timer(lambda: self._update_binary_tree_animation(structure), 50)
                     
                     # 设置动画总时长
                     self._animation_duration = 1000  # 1秒总时长
@@ -907,10 +880,7 @@ class MainController(QObject):
             structure.start_insert_animation(value, parent_value, position)
             
             # 使用定时器实现平滑动画
-            from PyQt5.QtCore import QTimer
-            self._animation_timer = QTimer()
-            self._animation_timer.timeout.connect(lambda: self._update_binary_tree_animation(structure))
-            self._animation_timer.start(50)  # 每50ms更新一次
+            self._restart_animation_timer(lambda: self._update_binary_tree_animation(structure), 50)
             
             # 设置动画总时长
             self._animation_duration = 1000  # 1秒总时长
@@ -961,20 +931,11 @@ class MainController(QObject):
             
             structure = self._get_current_structure()
             if structure:
-                # 如果已有定时器在运行，先停止并清理
-                if hasattr(self, '_animation_timer') and self._animation_timer is not None:
-                    self._animation_timer.stop()
-                    self._animation_timer.deleteLater()
-                    self._animation_timer = None
-                
                 # 开始插入动画
                 structure.insert(value)
                 
                 # 使用定时器实现平滑动画
-                from PyQt5.QtCore import QTimer
-                self._animation_timer = QTimer()
-                self._animation_timer.timeout.connect(lambda: self._update_bst_animation(structure))
-                self._animation_timer.start(50)  # 每50ms更新一次
+                self._restart_animation_timer(lambda: self._update_bst_animation(structure), 50)
                 
                 # 设置动画总时长
                 self._animation_duration = 1000  # 1秒总时长
@@ -996,10 +957,7 @@ class MainController(QObject):
                 # 开始查找动画
                 if structure.search_with_animation(value):
                     # 使用定时器实现平滑动画
-                    from PyQt5.QtCore import QTimer
-                    self._animation_timer = QTimer()
-                    self._animation_timer.timeout.connect(lambda: self._update_bst_search_animation(structure))
-                    self._animation_timer.start(50)  # 每50ms更新一次
+                    self._restart_animation_timer(lambda: self._update_bst_search_animation(structure), 50)
                     
                     # 设置动画总时长
                     self._animation_duration = 2000  # 2秒总时长（查找需要更多时间）
@@ -1041,7 +999,6 @@ class MainController(QObject):
             
             # 最终更新显示
             self._update_snapshot()
-            self._animation_timer.deleteLater()
     
     def _update_bst_delete_animation(self, structure):
         """更新BST删除动画"""
@@ -1073,7 +1030,6 @@ class MainController(QObject):
             
             # 最终更新显示
             self._update_snapshot()
-            self._animation_timer.deleteLater()
     
     def delete_bst(self, value: str):
         """删除BST节点"""
@@ -1091,10 +1047,7 @@ class MainController(QObject):
             structure.delete(value)
             
             # 使用定时器实现平滑动画
-            from PyQt5.QtCore import QTimer
-            self._animation_timer = QTimer()
-            self._animation_timer.timeout.connect(lambda: self._update_bst_delete_animation(structure))
-            self._animation_timer.start(50)  # 每50ms更新一次
+            self._restart_animation_timer(lambda: self._update_bst_delete_animation(structure), 50)
             
             # 设置动画总时长
             self._animation_duration = 2000  # 2秒总时长（删除需要更多时间）
@@ -1196,10 +1149,7 @@ class MainController(QObject):
         self._update_snapshot()
         
         # 计时器：放慢节奏（100ms tick，10000ms 总时长）
-        from PyQt5.QtCore import QTimer
-        self._animation_timer = QTimer()
-        self._animation_timer.timeout.connect(lambda: self._update_huffman_animation(structure))
-        self._animation_timer.start(100)
+        self._restart_animation_timer(lambda: self._update_huffman_animation(structure), 100)
         self._animation_duration = 10000
         self._animation_start_time = 0
     
@@ -1257,12 +1207,10 @@ class MainController(QObject):
                 structure._animation_state = "huffman_done"
                 structure._animation_progress = 1.0
                 self._update_snapshot()
-                self._animation_timer.deleteLater()
             else:
                 # 继续下一轮
                 structure._animation_state = None
                 structure._animation_progress = 0.0
-                self._animation_timer.deleteLater()
                 # 直接串起下一轮
                 self._start_huffman_merge_iteration(structure)
     
@@ -1356,7 +1304,6 @@ class MainController(QObject):
             elif structure._animation_state == 'deleting':
                 structure.complete_delete_animation()
             self._update_snapshot()
-            self._animation_timer.deleteLater()
     
     def _show_warning(self, message: str):
         """显示警告消息"""
@@ -1391,7 +1338,13 @@ class MainController(QObject):
         except Exception as e:
             return False, str(e)
     
-    def execute_dsl_script(self, script_text: str) -> Tuple[int, int, List[str]]:
+    def execute_dsl_script(
+        self,
+        script_text: str,
+        sequential: bool = False,
+        progress_callback=None,
+        finished_callback=None,
+    ):
         """
         执行DSL脚本(批量命令)
         
@@ -1403,8 +1356,16 @@ class MainController(QObject):
         """
         try:
             commands = self.dsl_parser.parse_script(script_text)
+            if sequential:
+                return self.dsl_executor.execute_script_sequential(
+                    commands,
+                    progress_callback=progress_callback,
+                    finished_callback=finished_callback,
+                )
             return self.dsl_executor.execute_script(commands)
         except Exception as e:
+            if sequential and finished_callback:
+                finished_callback(0, 1, [f"脚本解析失败: {str(e)}"])
             return 0, 1, [f"脚本解析失败: {str(e)}"]
     
     # ========== AVL树操作 ==========
@@ -1418,23 +1379,11 @@ class MainController(QObject):
             
             structure = self.structures.get("AVL")
             if structure:
-                # 检查并清理旧定时器，避免动画冲突
-                if hasattr(self, '_animation_timer') and self._animation_timer is not None:
-                    try:
-                        self._animation_timer.stop()
-                        self._animation_timer.deleteLater()
-                    except:
-                        pass
-                    self._animation_timer = None
-                
                 # 开始插入动画
                 structure.insert(value)
                 
                 # 使用定时器实现平滑动画
-                from PyQt5.QtCore import QTimer
-                self._animation_timer = QTimer()
-                self._animation_timer.timeout.connect(lambda: self._update_avl_animation(structure))
-                self._animation_timer.start(50)  # 每50ms更新一次
+                self._restart_animation_timer(lambda: self._update_avl_animation(structure), 50)
                 
                 # 设置动画总时长
                 self._animation_duration = 2000  # 2秒总时长
@@ -1445,7 +1394,6 @@ class MainController(QObject):
             self._show_error("插入失败", str(e))
             # 批量构建时，异常不应中断流程，继续处理队列
             if hasattr(self, '_avl_build_queue') and self._avl_build_queue:
-                from PyQt5.QtCore import QTimer
                 QTimer.singleShot(100, self._insert_next_avl_value)
     
     def _update_avl_animation(self, structure):
@@ -1480,18 +1428,18 @@ class MainController(QObject):
             # 最终更新显示
             self._update_snapshot()
             
-            # 保存队列状态，因为deleteLater()后可能会影响self引用
+            # 保存队列状态，稍后继续执行队列
             has_next = bool(self._avl_build_queue)
             
             # 清理定时器
             old_timer = self._animation_timer
             self._animation_timer = None  # 先清空引用
-            old_timer.deleteLater()
+            if old_timer is not None:
+                old_timer.stop()
             
             # 检查是否有待插入的AVL节点（批量构建）
             # 使用QTimer.singleShot延迟一小段时间，确保前一个定时器完全清理
             if has_next:
-                from PyQt5.QtCore import QTimer
                 QTimer.singleShot(100, self._insert_next_avl_value)
     
     def clear_avl(self):
@@ -1511,13 +1459,10 @@ class MainController(QObject):
     def clear_current_structure(self):
         """清空当前选中的数据结构（数据与动画状态）"""
         try:
-            # 停止并清理当前动画定时器，避免残留回调
-            if hasattr(self, '_animation_timer') and self._animation_timer is not None:
-                try:
-                    self._animation_timer.stop()
-                    self._animation_timer.deleteLater()
-                except Exception:
-                    pass
+            # 停止当前动画定时器，避免残留回调
+            timer = getattr(self, '_animation_timer', None)
+            if timer is not None:
+                timer.stop()
                 self._animation_timer = None
                 self._animation_start_time = 0
             
