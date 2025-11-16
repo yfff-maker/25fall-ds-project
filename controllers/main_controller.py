@@ -3,6 +3,7 @@
 主控制器：协调Model、View和用户交互
 """
 from typing import Dict, Any, Optional, List, Tuple
+from datetime import datetime
 from PyQt5.QtWidgets import QMessageBox, QDialog
 from PyQt5.QtCore import QObject, pyqtSignal, QTimer
 
@@ -38,6 +39,9 @@ class MainController(QObject):
     # 信号定义
     snapshot_updated = pyqtSignal(object)  # 快照更新信号
     hint_updated = pyqtSignal(str)  # 提示更新信号
+    operation_logged = pyqtSignal(str)  # 操作记录信号
+    operation_log_cleared = pyqtSignal()  # 日志清空信号
+    parent_selection_requested = pyqtSignal(str)  # 请求父节点选择
     
     def __init__(self):
         super().__init__()
@@ -74,6 +78,7 @@ class MainController(QObject):
         self._huffman_animation_pause_offset = 0  # 暂停时间偏移
         self._bst_build_queue = []  # BST批量构建队列
         self._avl_build_queue = []  # AVL批量构建队列
+        self._operation_logs: List[str] = []
         
         # 初始化DSL解析器和执行器
         self.dsl_parser = DSLParser()
@@ -200,6 +205,8 @@ class MainController(QObject):
             if structure:
                 structure.build(data)
                 self._update_snapshot()
+                text_repr = input_text.strip() if isinstance(input_text, str) else str(input_text)
+                self.log_operation(f"[顺序表] 构建数据: {text_repr or '(空)'}")
         except Exception as e:
             self._show_error("构建顺序表失败", str(e))
     
@@ -211,6 +218,7 @@ class MainController(QObject):
                 # 开始插入动画
                 structure.insert_at(position, value)
                 self._update_snapshot()
+                self.log_operation(f"[顺序表] 在位置 {position} 插入值 {value}")
                 
                 # 使用定时器实现平滑动画
                 self._restart_animation_timer(lambda: self._update_sequential_animation(structure), 50)
@@ -230,6 +238,7 @@ class MainController(QObject):
                 # 开始删除动画
                 structure.delete_at(position)
                 self._update_snapshot()
+                self.log_operation(f"[顺序表] 删除位置 {position} 的元素")
                 
                 # 使用定时器实现平滑动画
                 self._restart_animation_timer(lambda: self._update_sequential_animation(structure), 50)
@@ -287,6 +296,8 @@ class MainController(QObject):
                 # 开始构建动画
                 structure.build(data_generator)
                 self._update_snapshot()
+                text_repr = input_text.strip() if isinstance(input_text, str) else str(input_text)
+                self.log_operation(f"[链表] 构建数据: {text_repr or '(空)'}")
                 
                 # 使用定时器实现平滑动画
                 self._restart_animation_timer(lambda: self._update_linked_list_animation(structure), 50)
@@ -305,6 +316,7 @@ class MainController(QObject):
                 # 开始插入动画
                 structure.insert(position, value)
                 self._update_snapshot()
+                self.log_operation(f"[链表] 在位置 {position} 插入值 {value}")
                 
                 # 使用定时器实现平滑动画
                 self._restart_animation_timer(lambda: self._update_linked_list_animation(structure), 100)
@@ -323,6 +335,7 @@ class MainController(QObject):
                 # 启动删除动画
                 structure.delete_at(position)
                 self._update_snapshot()
+                self.log_operation(f"[链表] 删除位置 {position} 的元素")
                 
                 # 使用定时器实现平滑动画
                 self._restart_animation_timer(lambda: self._update_linked_list_animation(structure), 100)
@@ -344,6 +357,7 @@ class MainController(QObject):
             if structure and value:
                 structure.insert_at_end(value)
                 self._update_snapshot()
+                self.log_operation(f"[链表] 在尾部插入值 {value}")
         except Exception as e:
             self._show_error("尾部插入失败", str(e))
     
@@ -354,6 +368,7 @@ class MainController(QObject):
             if structure and value:
                 structure.delete_by_value(value)
                 self._update_snapshot()
+                self.log_operation(f"[链表] 删除值 {value}")
         except Exception as e:
             self._show_error("按值删除失败", str(e))
     
@@ -367,6 +382,7 @@ class MainController(QObject):
                 # 开始入栈动画
                 structure.push(value)
                 self._update_snapshot()
+                self.log_operation(f"[栈] Push 值 {value}")
                 
                 # 检查是否是栈满状态
                 if getattr(structure, '_animation_state', None) == 'stack_full':
@@ -572,6 +588,7 @@ class MainController(QObject):
             if not self._bst_build_queue:
                 self._show_warning("请输入有效的节点值")
                 return
+            self.log_operation(f"[BST] 批量构建: {', '.join(str(v) for v in self._bst_build_queue)}")
             
             # 立即更新视图，确保切换到BST视图可见（即使树为空）
             self._update_snapshot()
@@ -607,6 +624,7 @@ class MainController(QObject):
             if not self._avl_build_queue:
                 self._show_warning("请输入有效的节点值")
                 return
+            self.log_operation(f"[AVL] 批量构建: {', '.join(str(v) for v in self._avl_build_queue)}")
             
             # 立即更新视图，确保切换到AVL视图可见（即使树为空）
             self._update_snapshot()
@@ -631,6 +649,7 @@ class MainController(QObject):
                 # 开始出栈动画
                 structure.pop()
                 self._update_snapshot()
+                self.log_operation("[栈] Pop 栈顶元素")
                 
                 # 使用定时器实现平滑动画
                 self._restart_animation_timer(lambda: self._update_stack_animation(structure), 50)
@@ -649,6 +668,7 @@ class MainController(QObject):
             if structure:
                 structure.clear()
                 self._update_snapshot()
+                self.log_operation("[栈] 清空所有元素")
         except Exception as e:
             self._show_error("清空栈失败", str(e))
     
@@ -661,6 +681,8 @@ class MainController(QObject):
                 # 开始构建动画
                 structure.build(data)
                 self._update_snapshot()
+                text_repr = input_text.strip() if isinstance(input_text, str) else str(input_text)
+                self.log_operation(f"[栈] 批量构建: {text_repr or '(空)'}")
                 
                 # 检查是否是栈满状态
                 if getattr(structure, '_animation_state', None) == 'stack_full':
@@ -739,6 +761,7 @@ class MainController(QObject):
                 self._animation_start_time = 0
                 
                 self._update_snapshot()
+                self.log_operation(f"[二叉树] 创建根节点 {value}")
                 return
             
             # 如果有父节点值，开始插入动画
@@ -765,6 +788,7 @@ class MainController(QObject):
                     self._animation_start_time = 0
                     
                     self._update_snapshot()
+                    self.log_operation(f"[二叉树] 在节点 {parent_value} 的{position}子节点插入 {value}")
             else:
                 # 需要用户选择父节点
                 self._request_parent_selection(value)
@@ -840,6 +864,7 @@ class MainController(QObject):
                     break
             
             self._update_snapshot()
+            self.log_operation(f"[二叉树] 层序构建: {', '.join(map(str, values))}")
             
         except Exception as e:
             self._show_error("构建失败", str(e))
@@ -887,6 +912,7 @@ class MainController(QObject):
             self._animation_start_time = 0
             
             self._update_snapshot()
+            self.log_operation(f"[二叉树] 在节点 {parent_value} 的{position}侧插入 {value}")
             
         except Exception as e:
             self._show_error("插入失败", str(e))
@@ -914,6 +940,7 @@ class MainController(QObject):
             if success:
                 self._update_snapshot()
                 self.hint_updated.emit(f"已删除节点: {value} 及其子树")
+                self.log_operation(f"[二叉树] 删除节点 {value} 及其子树")
             else:
                 self._show_error("删除失败", "删除操作失败")
                 
@@ -942,6 +969,7 @@ class MainController(QObject):
                 self._animation_start_time = 0
                 
                 self._update_snapshot()
+                self.log_operation(f"[BST] 插入节点 {value}")
         except Exception as e:
             self._show_error("插入失败", str(e))
     
@@ -964,6 +992,7 @@ class MainController(QObject):
                     self._animation_start_time = 0
                     
                     self._update_snapshot()
+                    self.log_operation(f"[BST] 搜索节点 {value}")
                 else:
                     self._show_warning("树为空或值无效")
         except Exception as e:
@@ -994,8 +1023,10 @@ class MainController(QObject):
             # 显示查找结果
             if structure._animation_state == 'search_found':
                 self.hint_updated.emit(f"找到节点: {structure._search_value}")
+                self.log_operation(f"[BST] 搜索结果：找到 {structure._search_value}")
             elif structure._animation_state == 'search_not_found':
                 self.hint_updated.emit(f"未找到节点: {structure._search_value}")
+                self.log_operation(f"[BST] 搜索结果：未找到 {structure._search_value}")
             
             # 最终更新显示
             self._update_snapshot()
@@ -1054,6 +1085,7 @@ class MainController(QObject):
             self._animation_start_time = 0
             
             self._update_snapshot()
+            self.log_operation(f"[BST] 删除节点 {value}")
         except Exception as e:
             self._show_error("删除失败", str(e))
     
@@ -1067,6 +1099,11 @@ class MainController(QObject):
             if structure:
                 structure.build(freq_dict)
                 self._update_snapshot()
+                if isinstance(freq_text, str):
+                    freq_repr = freq_text.strip()
+                else:
+                    freq_repr = str(freq_text)
+                self.log_operation(f"[哈夫曼树] 构建频率: {freq_repr or '(空)'}")
                 
                 # 启动哈夫曼树动画
                 self.start_huffman_animation()
@@ -1098,8 +1135,14 @@ class MainController(QObject):
                 if freq_map:
                     leaves = [(char, freq) for char, freq in freq_map.items()]
                 else:
-                    # 默认示例
-                    leaves = [("A", 25), ("B", 15), ("C", 27), ("D", 5), ("E", 30)]
+                    # 没有输入则直接返回，保持空视图
+                    self._huffman_queue = []
+                    structure._queue = []
+                    structure._current_merge_nodes = []
+                    structure._animation_state = None
+                    structure._animation_progress = 0.0
+                    self._update_snapshot()
+                    return
             
             # 2) 转为本地队列（控制器维护），同时暴露给适配器
             q = []
@@ -1315,8 +1358,26 @@ class MainController(QObject):
         # 这里应该通过信号发送到UI层
         self.hint_updated.emit(f"错误: {title} - {message}")
     
-    # 信号定义（用于UI交互）
-    parent_selection_requested = pyqtSignal(str)  # 请求父节点选择
+    def log_operation(self, message: str):
+        """记录一条操作日志并发射信号"""
+        if not message:
+            return
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        entry = f"[{timestamp}] {message}"
+        self._operation_logs.append(entry)
+        if len(self._operation_logs) > 200:
+            self._operation_logs.pop(0)
+        self.operation_logged.emit(entry)
+    
+    def get_operation_logs(self) -> List[str]:
+        """获取操作日志历史"""
+        return list(self._operation_logs)
+    
+    def clear_operation_logs(self):
+        """清空操作日志"""
+        if self._operation_logs:
+            self._operation_logs.clear()
+        self.operation_log_cleared.emit()
     
     # ========== DSL功能 ==========
     
@@ -1390,6 +1451,7 @@ class MainController(QObject):
                 self._animation_start_time = 0
                 
                 self._update_snapshot()
+                self.log_operation(f"[AVL] 插入节点 {value}")
         except Exception as e:
             self._show_error("插入失败", str(e))
             # 批量构建时，异常不应中断流程，继续处理队列
@@ -1453,6 +1515,7 @@ class MainController(QObject):
                 structure._new_value = None
                 structure._rotation_plan = None
                 self._update_snapshot()
+                self.log_operation("[AVL] 清空整棵树")
         except Exception as e:
             self._show_error("清空失败", str(e))
     
@@ -1489,6 +1552,7 @@ class MainController(QObject):
             
             # 刷新界面
             self._update_snapshot()
+            self.log_operation(f"[{self.current_structure_key}] 清空当前结构")
         except Exception as e:
             self._show_error("清空失败", str(e))
     

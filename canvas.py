@@ -221,19 +221,37 @@ class Canvas(QObject):
 
     def _render_circle_node(self, node):
         """渲染圆形节点"""
-        circle = QGraphicsEllipseItem(0, 0, NODE_RADIUS*2, NODE_RADIUS*2)
+        diameter = node.width or NODE_RADIUS * 2
+        radius = diameter / 2
+        circle = QGraphicsEllipseItem(0, 0, diameter, diameter)
         circle.setBrush(QBrush(QColor(node.color)))
-        circle.setPen(QPen(Qt.black, 1))
-        circle.setPos(node.x - NODE_RADIUS, node.y - NODE_RADIUS)
+        border_color = getattr(node, 'border_color', Qt.black)
+        border_width = getattr(node, 'border_width', 1)
+        circle.setPen(QPen(QColor(border_color), border_width))
+        circle.setPos(node.x - radius, node.y - radius)
         
         label = QGraphicsTextItem(node.value)
         font = QFont(); font.setPointSize(10)
         label.setFont(font)
-        label.setDefaultTextColor(DEFAULT_TEXT_COLOR)
-        label.setPos(circle.pos().x()+8, circle.pos().y()+4)
+        value_color = getattr(node, 'text_color', '#FFFFFF')
+        label.setDefaultTextColor(QColor(value_color))
+        label_width = label.boundingRect().width()
+        label_height = label.boundingRect().height()
+        label.setPos(node.x - label_width/2, node.y - label_height/2)
         
         self.scene.addItem(circle)
         self.scene.addItem(label)
+        
+        sub_label = getattr(node, 'sub_label', None)
+        if sub_label:
+            sub_item = QGraphicsTextItem(sub_label)
+            sub_font = QFont(); sub_font.setPointSize(9)
+            sub_item.setFont(sub_font)
+            sub_color = getattr(node, 'sub_label_color', '#1f4e79')
+            sub_item.setDefaultTextColor(QColor(sub_color))
+            sub_width = sub_item.boundingRect().width()
+            sub_item.setPos(node.x - sub_width/2, node.y + radius - 2)
+            self.scene.addItem(sub_item)
 
     def _render_box_node(self, node):
         """渲染方框节点（用于二叉树）"""

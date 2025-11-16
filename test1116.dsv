@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "current_structure_key": "LinkedList",
+  "structures": {
+    "SequentialList": {
+      "elements": [],
+      "capacity": 100
+    },
+    "LinkedList": {
+      "elements": [
+        "10",
+        "15",
+        "20",
+        "30",
+        "40"
+      ]
+    },
+    "Stack": {
+      "elements": [],
+      "capacity": 100
+    },
+    "BinaryTree": {
+      "root": null
+    },
+    "BST": {
+      "root": {
+        "value": 50.0,
+        "left": {
+          "value": 30.0,
+          "left": {
+            "value": 20.0,
+            "left": null,
+            "right": null
+          },
+          "right": {
+            "value": 40.0,
+            "left": null,
+            "right": null
+          }
+        },
+        "right": {
+          "value": 70.0,
+          "left": {
+            "value": 60.0,
+            "left": null,
+            "right": null
+          },
+          "right": {
+            "value": 80.0,
+            "left": null,
+            "right": null
+          }
+        }
+      }
+    },
+    "AVL": {
+      "root": null
+    },
+    "HuffmanTree": {
+      "freq_map": {
+        "A": 25,
+        "B": 15,
+        "C": 27,
+        "D": 5,
+        "E": 30
+      }
+    }
+  }
+}

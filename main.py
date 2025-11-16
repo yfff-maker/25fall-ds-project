@@ -17,6 +17,7 @@ from canvas import Canvas
 from widgets.control_panel import ControlPanel
 from controllers.main_controller import MainController
 from ui.chat_panel import ChatPanel
+from ui.operation_log_panel import OperationLogPanel
 from ui.theme_helper import ThemeHelper, ThemeMode
 
 '''父节点选择对话框'''
@@ -97,6 +98,15 @@ class MainWindow(QMainWindow):
             self.controller = MainController() # ← 组合关系：MainWindow 持有 MainController 实例
             self.current_file_path = None  # 记住当前文件路径
             
+            # 操作日志面板（位于LLM区域左侧）
+            self.operation_log_panel = OperationLogPanel(self)
+            self.operation_log_panel.set_records(self.controller.get_operation_logs())
+            self.operation_log_dock = QDockWidget("操作记录", self)
+            self.operation_log_dock.setAllowedAreas(Qt.RightDockWidgetArea)
+            self.operation_log_dock.setWidget(self.operation_log_panel)
+            self.operation_log_dock.setMinimumWidth(260)
+            self.addDockWidget(Qt.RightDockWidgetArea, self.operation_log_dock)
+            
             # LLM线程管理
             self._llm_thread = None
             self._chat_pending_text = None
@@ -107,6 +117,9 @@ class MainWindow(QMainWindow):
             self.controller.snapshot_updated.connect(self.canvas.render_snapshot)
             self.controller.hint_updated.connect(self.mode_label.setText)
             self.controller.parent_selection_requested.connect(self._handle_parent_selection_request)
+            self.controller.operation_logged.connect(self.operation_log_panel.append_record)
+            self.controller.operation_log_cleared.connect(self.operation_log_panel.clear_records)
+            self.operation_log_panel.clearRequested.connect(self.controller.clear_operation_logs)
 
             # 右侧：LLM 对话面板（常驻）
             self.chat_dock = QDockWidget("LLM 对话", self)
@@ -114,6 +127,7 @@ class MainWindow(QMainWindow):
             self.chat_panel = ChatPanel(self.chat_dock)
             self.chat_dock.setWidget(self.chat_panel)
             self.addDockWidget(Qt.RightDockWidgetArea, self.chat_dock)
+            self.splitDockWidget(self.operation_log_dock, self.chat_dock, Qt.Horizontal)
             self.chat_panel.sendMessage.connect(self._on_chat_send)
             self.chat_panel.modelChanged.connect(self._on_chat_model_changed)
             self.controller.set_llm_model(self.chat_panel.current_model())
@@ -547,8 +561,7 @@ class MainWindow(QMainWindow):
 
         elif key == "HuffmanTree":
             line = QLineEdit()
-            line.setPlaceholderText('输入频率映射，如: A:25,B:15,C:27,D:5,E:30')
-            line.setText('A:25,B:15,C:27,D:5,E:30')  # 设置默认值
+            line.setPlaceholderText('输入频率映射，如: A:25,B:15,C:27,D:5')
             lay.addWidget(line)
             b1 = QPushButton("构建哈夫曼树")
             def build():

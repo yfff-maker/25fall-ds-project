@@ -2,6 +2,7 @@
 """
 数据适配器：将数据结构状态转换为可视化快照
 """
+import copy
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 
@@ -28,6 +29,11 @@ class NodeSnapshot:
     node_type: str = "circle"  # "circle" 或 "box"
     width: Optional[float] = None
     height: Optional[float] = None
+    text_color: str = "#FFFFFF"
+    border_color: Optional[str] = None
+    border_width: int = 2
+    sub_label: Optional[str] = None
+    sub_label_color: str = "#1f4e79"
 
 @dataclass
 class EdgeSnapshot:
@@ -104,7 +110,10 @@ def center_snapshot(snapshot: StructureSnapshot,
     for node in snapshot.nodes:
         width = node.width if node.width is not None else (60 if node.node_type == "box" else 40)
         height = node.height if node.height is not None else (40 if node.node_type == "box" else 40)
-        _include_rect(node.x, node.y, width, height)
+        if node.node_type == "circle":
+            _include_rect(node.x - width / 2, node.y - height / 2, width, height)
+        else:
+            _include_rect(node.x, node.y, width, height)
 
     for box in snapshot.boxes:
         _include_rect(box.x, box.y, box.width, box.height)
@@ -1271,7 +1280,7 @@ class BinaryTreeAdapter:
         # 计算子节点位置
         if node.left and node.right:
             # 两个子节点
-            total_child_width = left_width + right_width + min_spacing * 1.5
+            total_child_width = left_width + right_width + min_spacing
             left_center = center_x - total_child_width / 2 + left_width / 2
             right_center = center_x + total_child_width / 2 - right_width / 2
             
@@ -2108,6 +2117,41 @@ class HuffmanTreeAdapter:
     """哈夫曼树适配器 - 支持构建动画"""
     
     @staticmethod
+    def _append_circle_node(
+        snapshot: StructureSnapshot,
+        node_id: str,
+        freq,
+        x: float,
+        y: float,
+        label: str,
+        color: str = "#1f4e79",
+        text_color: str = "#FF3333",
+        sub_label_color: str = "#1f4e79",
+        scale: float = 1.0,
+    ) -> NodeSnapshot:
+        """创建并添加圆形节点，数值在圆内，标签显示在圆下方"""
+        try:
+            freq_value = int(freq)
+        except (ValueError, TypeError):
+            freq_value = freq
+        diameter = max(20, int(72 * scale))
+        node_snapshot = NodeSnapshot(
+            id=node_id,
+            value=str(freq_value),
+            x=x,
+            y=y,
+            node_type="circle",
+            width=diameter,
+            height=diameter,
+            color=color,
+            text_color=text_color,
+            sub_label=label,
+            sub_label_color=sub_label_color,
+        )
+        snapshot.nodes.append(node_snapshot)
+        return node_snapshot
+    
+    @staticmethod
     def to_snapshot(huffman, start_x=100, y=220, spacing=130,
                     merge_cx=600, merge_cy=180,
                     box_w=90, box_h=46) -> StructureSnapshot:
@@ -2139,18 +2183,11 @@ class HuffmanTreeAdapter:
                     leaves = list(huffman.get_leaves())
                 except Exception:
                     leaves = []
-            # 如果还是没有，尝试从原始频率映射构建
-            if not leaves:
-                freq_map = getattr(huffman, '_original_freq_map', {})
-                if freq_map:
-                    queue = [(char, freq) for char, freq in freq_map.items()]
-                else:
-                    queue = []
-            else:
+            if leaves:
                 queue = leaves
         
         if not queue:
-            # 队列为空时不再绘制右侧完整树，直接返回
+            snapshot.hint_text = "哈夫曼树：请输入频率映射并开始构建"
             return snapshot
         
         # 辅助：获取 id、字符与频率、是否子树
@@ -2186,21 +2223,32 @@ class HuffmanTreeAdapter:
         def queue_pos(i):
             return start_x + i * spacing, y
         
-        # 画方框（字符+频率）
-        def draw_box(id_key, label, freq, x, yy, color="#E8F4FD", text_color="#000", scale=1.0):
-            bw = int(box_w * scale); bh = int(box_h * scale)
-            box = BoxSnapshot(
-                id=f"hf_{id_key}",
-                value=f"{label}\n{freq}%",
-                x=x - bw // 2, y=yy - bh // 2,
-                width=bw, height=bh,
-                color=color, text_color=text_color
+        def draw_circle_node(
+            id_key,
+            freq,
+            label,
+            x,
+            yy,
+            color=None,
+            text_color="#FFFFFF",
+            sub_label_color="#1f4e79",
+            scale=1.0,
+        ):
+            return HuffmanTreeAdapter._append_circle_node(
+                snapshot,
+                f"hf_{id_key}",
+                freq,
+                x,
+                yy,
+                label or "*",
+                color=color or "#1f4e79",
+                text_color=text_color,
+                sub_label_color=sub_label_color,
+                scale=scale,
             )
-            snapshot.boxes.append(box)
-            return box
         
         # 画折线模拟弧线（p->mid->q）
-        def draw_arc(x1, y1, x2, y2, color="#FF8C00", lift=60):
+        def draw_arc(x1, y1, x2, y2, color="#2E86AB", lift=60):
             mid_x = (x1 + x2) / 2
             mid_y = min(y1, y2) - abs(lift)
             e1 = EdgeSnapshot(from_id="", to_id="", arrow_type="arrow")
@@ -2248,30 +2296,33 @@ class HuffmanTreeAdapter:
                     e = EdgeSnapshot(from_id="", to_id="", arrow_type="arrow")
                     e.from_x, e.from_y = x0, y0
                     e.to_x,   e.to_y   = xl, yl
-                    e.color = "#1f77b4"  # 左 0
+                    e.color = "#2E86AB"
                     snapshot.edges.append(e)
                 if getattr(nd, 'right', None):
                     xr, yr = pix(nd.right)
                     e = EdgeSnapshot(from_id="", to_id="", arrow_type="arrow")
                     e.from_x, e.from_y = x0, y0
                     e.to_x,   e.to_y   = xr, yr
-                    e.color = "#d62728"  # 右 1
+                    e.color = "#2E86AB"
                     snapshot.edges.append(e)
-            # 再画小框
-            bw = int(80 * 0.6 * scale); bh = int(40 * 0.6 * scale)
             for nd in pos.keys():
                 x0, y0 = pix(nd)
                 nid = f"mini_{id(nd)}"
                 val = getattr(nd, 'char', None) or "*"
                 freq = getattr(nd, 'freq', 0)
-                box = BoxSnapshot(
-                    id=f"{nid}_box",
-                    value=f"{val}\n{freq}%",
-                    x=x0 - bw//2, y=y0 - bh//2,
-                    width=bw, height=bh,
-                    color="#E8F4FD"
+                # 叶子节点=黄色字体，内部节点=白色字体
+                node_text_color = "#FFD700" if getattr(nd, 'char', None) else "#FFFFFF"
+                HuffmanTreeAdapter._append_circle_node(
+                    snapshot,
+                    f"{nid}_node",
+                    freq,
+                    x0,
+                    y0,
+                    val,
+                    color="#1f4e79",
+                    text_color=node_text_color,
+                    scale=0.6 * scale,
                 )
-                snapshot.boxes.append(box)
         
         def lerp(a, b, t):
             return a + (b - a) * t
@@ -2307,9 +2358,12 @@ class HuffmanTreeAdapter:
                 draw_compact_tree(it, qx, qy - 6, scale=0.85)
             else:
                 if hasattr(huffman, '_merged_nodes') and iid in merged_nodes:
-                    draw_box(iid, label, freq, qx, qy, color="#EEEEEE", text_color="#888")
+                    draw_circle_node(iid, freq, label, qx, qy, color="#3A3A3A", text_color="#C0C0C0")
                 else:
-                    draw_box(iid, label, freq, qx, qy, color="#E8F4FD")
+                    # 叶子节点=黄色字体，内部节点=白色字体
+                    item_char = get_char(it)
+                    node_text_color = "#FFD700" if item_char and item_char not in (None, "", "*") else "#FFFFFF"
+                    draw_circle_node(iid, freq, label, qx, qy, text_color=node_text_color)
         
         # 2) 对被选中两项做动画
         if len(selected) == 2:
@@ -2321,12 +2375,16 @@ class HuffmanTreeAdapter:
                 if is_tree(itA):
                     draw_compact_tree(itA, ax0, ay0 - 6, scale=0.85)
                 else:
-                    draw_box(idA, labelA, freqA, ax0, ay0, color="#FFD166")
+                    charA = get_char(itA)
+                    text_colorA = "#FFD700" if charA and charA not in (None, "", "*") else "#FFFFFF"
+                    draw_circle_node(idA, freqA, labelA, ax0, ay0, color="#2ECC71", text_color=text_colorA)
                 # B
                 if is_tree(itB):
                     draw_compact_tree(itB, bx0, by0 - 6, scale=0.85)
                 else:
-                    draw_box(idB, labelB, freqB, bx0, by0, color="#F58518")
+                    charB = get_char(itB)
+                    text_colorB = "#FFD700" if charB and charB not in (None, "", "*") else "#FFFFFF"
+                    draw_circle_node(idB, freqB, labelB, bx0, by0, color="#2ECC71", text_color=text_colorB)
                 if not hasattr(snapshot, 'step_details') or snapshot.step_details is None:
                     snapshot.step_details = []
                 snapshot.step_details.append("选择最小两个节点（高亮）")
@@ -2340,12 +2398,16 @@ class HuffmanTreeAdapter:
                 if is_tree(itA):
                     draw_compact_tree(itA, ax, ay, scale=0.9)
                 else:
-                    draw_box(idA, labelA, freqA, ax, ay, color="#FFD166")
+                    charA = get_char(itA)
+                    text_colorA = "#FFD700" if charA and charA not in (None, "", "*") else "#FFFFFF"
+                    draw_circle_node(idA, freqA, labelA, ax, ay, color="#2ECC71", text_color=text_colorA)
                 # B
                 if is_tree(itB):
                     draw_compact_tree(itB, bx, by, scale=0.9)
                 else:
-                    draw_box(idB, labelB, freqB, bx, by, color="#F58518")
+                    charB = get_char(itB)
+                    text_colorB = "#FFD700" if charB and charB not in (None, "", "*") else "#FFFFFF"
+                    draw_circle_node(idB, freqB, labelB, bx, by, color="#2ECC71", text_color=text_colorB)
                 if not hasattr(snapshot, 'step_details') or snapshot.step_details is None:
                     snapshot.step_details = []
                 snapshot.step_details.append("漂移到合并区域")
@@ -2360,11 +2422,15 @@ class HuffmanTreeAdapter:
                 if is_tree(itA):
                     draw_compact_tree(itA, ax, ay, scale=scale)
                 else:
-                    draw_box(idA, labelA, freqA, ax, ay, color="#FFD166", scale=scale)
+                    charA = get_char(itA)
+                    text_colorA = "#FFD700" if charA and charA not in (None, "", "*") else "#FFFFFF"
+                    draw_circle_node(idA, freqA, labelA, ax, ay, color="#2ECC71", text_color=text_colorA, scale=scale)
                 if is_tree(itB):
                     draw_compact_tree(itB, bx, by, scale=scale)
                 else:
-                    draw_box(idB, labelB, freqB, bx, by, color="#F58518", scale=scale)
+                    charB = get_char(itB)
+                    text_colorB = "#FFD700" if charB and charB not in (None, "", "*") else "#FFFFFF"
+                    draw_circle_node(idB, freqB, labelB, bx, by, color="#2ECC71", text_color=text_colorB, scale=scale)
                 
                 # 父节点（仅渲染用）
                 try:
@@ -2373,18 +2439,19 @@ class HuffmanTreeAdapter:
                 except (ValueError, TypeError):
                     pfreq = freqA + freqB
                 # 父->子连线（连接到两棵子树的根）
-                draw_box("par_tmp", f"{labelA}+{labelB}", pfreq, merge_cx, merge_cy, color="#4ECDC4")
+                # 父节点是新生成的内部节点，使用白色字体
+                draw_circle_node("par_tmp", pfreq, "*", merge_cx, merge_cy, color="#1f4e79", text_color="#FFFFFF")
                 # 父→A根
                 eL = EdgeSnapshot(from_id="", to_id="", arrow_type="arrow")
                 eL.from_x, eL.from_y = merge_cx, merge_cy
                 eL.to_x,   eL.to_y   = ax, ay
-                eL.color = "#1f77b4"  # 左 0
+                eL.color = "#2E86AB"
                 snapshot.edges.append(eL)
                 # 父→B根
                 eR = EdgeSnapshot(from_id="", to_id="", arrow_type="arrow")
                 eR.from_x, eR.from_y = merge_cx, merge_cy
                 eR.to_x,   eR.to_y   = bx, by
-                eR.color = "#d62728"  # 右 1
+                eR.color = "#2E86AB"
                 snapshot.edges.append(eR)
                 
                 if not hasattr(snapshot, 'step_details') or snapshot.step_details is None:
@@ -2413,9 +2480,9 @@ class HuffmanTreeAdapter:
                 
                 # 旧位置两项可淡灰（历史痕迹）
                 if not is_tree(itA):
-                    draw_box(idA, labelA, freqA, ax0, ay0, color="#EEEEEE", text_color="#888")
+                    draw_circle_node(idA, freqA, labelA, ax0, ay0, color="#3a3a3a", text_color="#c0c0c0", sub_label_color="#c0c0c0")
                 if not is_tree(itB):
-                    draw_box(idB, labelB, freqB, bx0, by0, color="#EEEEEE", text_color="#888")
+                    draw_circle_node(idB, freqB, labelB, bx0, by0, color="#3a3a3a", text_color="#c0c0c0", sub_label_color="#c0c0c0")
                 
                 if not hasattr(snapshot, 'step_details') or snapshot.step_details is None:
                     snapshot.step_details = []
@@ -2448,22 +2515,36 @@ class HuffmanTreeAdapter:
         nid = f"t_{id(node)}"
         val = getattr(node, 'char', None) or "*"
         freq = getattr(node, 'freq', 0)
-        color = "#90EE90" if node == root_node else "#E8F4FD"
-        
-        box = BoxSnapshot(id=f"{nid}_box", value=f"{val}\n{freq}%", x=x-40, y=yy-20, width=80, height=40, color=color)
-        snapshot.boxes.append(box)
+        fill_color = "#90EE90" if node == root_node else "#1f4e79"
+        # 根据节点类型设置字体颜色：叶子=黄色，内部=白色
+        node_char = getattr(node, 'char', None)
+        if node == root_node:
+            text_color = "#1f4e79"  # 根节点特殊颜色
+        else:
+            text_color = "#FFD700" if node_char else "#FFFFFF"
+        HuffmanTreeAdapter._append_circle_node(
+            snapshot,
+            f"{nid}_node",
+            freq,
+            x,
+            yy,
+            val,
+            color=fill_color,
+            text_color=text_color,
+            sub_label_color="#1f4e79"
+        )
         
         if getattr(node, 'left', None):
             lx, ly = x - dx, yy + dy
-            e = EdgeSnapshot(from_id=f"{nid}_box", to_id=f"t_{id(node.left)}_box", arrow_type="arrow")
-            e.from_x, e.from_y = x, yy; e.to_x, e.to_y = lx, ly; e.color = "#1f77b4"
+            e = EdgeSnapshot(from_id=f"{nid}_node", to_id=f"t_{id(node.left)}_node", arrow_type="arrow")
+            e.from_x, e.from_y = x, yy; e.to_x, e.to_y = lx, ly; e.color = "#2E86AB"
             snapshot.edges.append(e)
             HuffmanTreeAdapter._draw_final_tree(node.left, snapshot, lx, ly, dx=int(dx*0.75), dy=dy, root_node=root_node)
         
         if getattr(node, 'right', None):
             rx, ry = x + dx, yy + dy
-            e = EdgeSnapshot(from_id=f"{nid}_box", to_id=f"t_{id(node.right)}_box", arrow_type="arrow")
-            e.from_x, e.from_y = x, yy; e.to_x, e.to_y = rx, ry; e.color = "#d62728"
+            e = EdgeSnapshot(from_id=f"{nid}_node", to_id=f"t_{id(node.right)}_node", arrow_type="arrow")
+            e.from_x, e.from_y = x, yy; e.to_x, e.to_y = rx, ry; e.color = "#2E86AB"
             snapshot.edges.append(e)
             HuffmanTreeAdapter._draw_final_tree(node.right, snapshot, rx, ry, dx=int(dx*0.75), dy=dy, root_node=root_node)
     
@@ -2490,6 +2571,13 @@ class HuffmanTreeAdapter:
             huffman_tree, current_round, total_rounds, build_step, progress
         )
         
+        freq_signature = tuple(sorted(freq_map.items()))
+        if not freq_signature:
+            setattr(huffman_tree, "_last_tree_snapshot", None)
+            setattr(huffman_tree, "_last_tree_signature", None)
+        cached_tree = getattr(huffman_tree, "_last_tree_snapshot", None)
+        cached_signature = getattr(huffman_tree, "_last_tree_signature", None)
+
         # 在屏幕上方显示队列中的节点/子树（水平排列）
         top_start_x = 100
         top_y = y - 100
@@ -2505,6 +2593,11 @@ class HuffmanTreeAdapter:
         freq_map = safe_freq_map
         sorted_items = sorted(freq_map.items(), key=lambda x: int(x[1]))
         
+        # 在新的选择阶段（build_step==0）显示缓存的已建树
+        if build_step == 0 and cached_tree and cached_signature == freq_signature:
+            snapshot.nodes.extend(copy.deepcopy(cached_tree.get("nodes", [])))
+            snapshot.edges.extend(copy.deepcopy(cached_tree.get("edges", [])))
+
         # 获取当前队列状态
         if hasattr(huffman_tree, '_current_queue') and hasattr(huffman_tree, '_queue_trees'):
             current_queue = huffman_tree._current_queue
@@ -2534,13 +2627,16 @@ class HuffmanTreeAdapter:
             is_merging = HuffmanTreeAdapter._is_node_merging_in_step(i, build_step, progress)
             is_returning = HuffmanTreeAdapter._is_node_returning_in_step(i, build_step, progress)
             
+            base_blue = "#1f4e79"
+            highlight_green = "#2ECC71"
+
             if is_merging:
                 # 节点正在合并
                 target_x = start_x  # 合并区域
                 target_y = y + 200
                 current_x = target_x
                 current_y = target_y
-                color = "#FF6B6B"  # 红色表示正在合并
+                color = highlight_green
                 scale = 0.8 + 0.4 * progress  # 逐渐变大
             elif is_moving:
                 # 节点正在移动
@@ -2548,7 +2644,7 @@ class HuffmanTreeAdapter:
                 target_y = y + 200
                 current_x = node_x + (target_x - node_x) * progress
                 current_y = node_y + (target_y - node_y) * progress
-                color = "#FFD700"  # 金色表示正在移动
+                color = highlight_green
                 scale = 1.2
             elif is_returning:
                 # 节点正在返回
@@ -2556,47 +2652,52 @@ class HuffmanTreeAdapter:
                 target_y = top_y
                 current_x = start_x + (target_x - start_x) * progress
                 current_y = y + 200 + (target_y - (y + 200)) * progress
-                color = "#00FF00"  # 绿色表示新节点
+                color = highlight_green
                 scale = 1.1
             elif build_step >= 2 and i < 2:
                 # 已合并的节点淡出
                 fade_alpha = max(0.1, 1.0 - (build_step - 2) * 0.5)
-                color = f"rgba(76, 120, 168, {fade_alpha})"  # 淡出效果
+                color = f"rgba(31, 78, 121, {fade_alpha})"  # 淡出效果
                 scale = 0.8
             elif is_selected:
                 # 被选中的节点
-                color = "#FFD700"  # 金色高亮
+                color = highlight_green
                 scale = 1.1
             else:
                 # 普通节点
-                if tree.char is not None:
-                    color = "#4C78A8"  # 蓝色表示叶子节点
-                else:
-                    color = "#8B4513"  # 棕色表示子树
+                color = base_blue
                 scale = 1.0
             
             # 确定最终位置
             final_x = current_x if (is_moving or is_merging or is_returning) else node_x
             final_y = current_y if (is_moving or is_merging or is_returning) else node_y
             
-            # 根据节点类型选择形状
-            node_type = "circle" if tree.char is not None else "box"
-            
-            node_snapshot = NodeSnapshot(
-                id=f"queue_{i}_{char}",
-                value=str(freq),  # 只显示权值数字
-                x=final_x,
-                y=final_y,
-                node_type=node_type,
+            char_label = tree.char if tree.char not in (None, "") else "*"
+            # 根据节点类型设置字体颜色：叶子=黄色，内部=白色
+            node_text_color = "#FFD700" if tree.char else "#FFFFFF"
+            parent_node = HuffmanTreeAdapter._append_circle_node(
+                snapshot,
+                f"queue_{id(tree)}",
+                freq,
+                final_x,
+                final_y,
+                char_label,
                 color=color,
-                width=int(60 * scale),
-                height=int(60 * scale)
+                text_color=node_text_color,
+                scale=scale,
             )
-            snapshot.nodes.append(node_snapshot)
             
             # 如果是子树且不在移动/合并/返回状态，显示子树结构
+            # 当显示子树结构时使用字母，数值来自子树
             if tree.char is None and not (is_moving or is_merging or is_returning):
-                HuffmanTreeAdapter._add_subtree_visualization(tree, snapshot, final_x, final_y, node_spacing)
+                HuffmanTreeAdapter._add_subtree_visualization(
+                    tree,
+                    snapshot,
+                    final_x,
+                    final_y,
+                    node_spacing,
+                    parent_id=parent_node.id,
+                )
             
             # 移除移动路径指示线（黄色线）
         
@@ -2642,21 +2743,38 @@ class HuffmanTreeAdapter:
                     scale = 1.0
                     color = "#00FF00"
                 
-                new_node_snapshot = NodeSnapshot(
-                    id="merged_node",
-                    value=str(merged_freq),  # 只显示权值数字
-                    x=new_node_x,
-                    y=new_node_y,
-                    node_type="circle",
+                # 合并后的新节点是内部节点，使用白色字体
+                HuffmanTreeAdapter._append_circle_node(
+                    snapshot,
+                    "merged_node",
+                    merged_freq,
+                    new_node_x,
+                    new_node_y,
+                    merged_char or "*",
                     color=color,
-                    width=int(60 * scale),
-                    height=int(60 * scale)
+                    text_color="#FFFFFF",
+                    scale=scale,
                 )
-                snapshot.nodes.append(new_node_snapshot)
         
         # 显示已构建的树结构
         if build_step > 0:
             HuffmanTreeAdapter._add_built_tree_nodes(huffman_tree, snapshot, start_x + 200, y, level_height, build_step, progress)
+            built_nodes = [
+                copy.deepcopy(node)
+                for node in snapshot.nodes
+                if isinstance(node.id, str) and node.id.startswith("tree_node_")
+            ]
+            built_edges = [
+                copy.deepcopy(edge)
+                for edge in snapshot.edges
+                if (
+                    (isinstance(getattr(edge, "from_id", ""), str) and getattr(edge, "from_id").startswith("tree_node_"))
+                    or (isinstance(getattr(edge, "to_id", ""), str) and getattr(edge, "to_id").startswith("tree_node_"))
+                )
+            ]
+            if built_nodes or built_edges:
+                setattr(huffman_tree, "_last_tree_snapshot", {"nodes": built_nodes, "edges": built_edges})
+                setattr(huffman_tree, "_last_tree_signature", freq_signature)
         
         return snapshot
     
@@ -2822,7 +2940,7 @@ class HuffmanTreeAdapter:
         return history
     
     @staticmethod
-    def _add_subtree_visualization(tree, snapshot, center_x, center_y, spacing):
+    def _add_subtree_visualization(tree, snapshot, center_x, center_y, spacing, parent_id=None):
         """添加子树的可视化表示"""
         if tree.char is not None:
             return  # 叶子节点不需要子树可视化
@@ -2833,55 +2951,64 @@ class HuffmanTreeAdapter:
         child_y = center_y + 40
         
         # 添加子节点
+        base_blue = "#1f4e79"
+        label_color = "#1f4e79"
+        
         if tree.left:
-            left_node = NodeSnapshot(
-                id=f"subtree_left_{id(tree)}",
-                value=str(tree.left.freq),
-                x=left_x,
-                y=child_y,
-                node_type="circle" if tree.left.char is not None else "box",
-                color="#4C78A8" if tree.left.char is not None else "#8B4513",
-                width=40,
-                height=40
+            left_label = tree.left.char or "*"
+            # 根据节点类型设置字体颜色：叶子=黄色，内部=白色
+            left_text_color = "#FFD700" if tree.left.char else "#FFFFFF"
+            left_node = HuffmanTreeAdapter._append_circle_node(
+                snapshot,
+                f"subtree_left_{id(tree)}",
+                tree.left.freq,
+                left_x,
+                child_y,
+                left_label,
+                color=base_blue,
+                text_color=left_text_color,
+                sub_label_color=label_color,
+                scale=0.75,
             )
-            snapshot.nodes.append(left_node)
             
-            # 添加边
             edge = EdgeSnapshot(
-                from_id=f"queue_{id(tree)}",
-                to_id=f"subtree_left_{id(tree)}",
+                from_id=parent_id or "",
+                to_id=left_node.id,
                 arrow_type="line"
             )
-            edge.from_x = center_x - 15
-            edge.from_y = center_y + 15
-            edge.to_x = left_x + 20
-            edge.to_y = child_y - 20
+            edge.from_x = center_x
+            edge.from_y = center_y
+            edge.to_x = left_x
+            edge.to_y = child_y
             edge.color = "#2E86AB"
             snapshot.edges.append(edge)
         
         if tree.right:
-            right_node = NodeSnapshot(
-                id=f"subtree_right_{id(tree)}",
-                value=str(tree.right.freq),
-                x=right_x,
-                y=child_y,
-                node_type="circle" if tree.right.char is not None else "box",
-                color="#4C78A8" if tree.right.char is not None else "#8B4513",
-                width=40,
-                height=40
+            right_label = tree.right.char or "*"
+            # 根据节点类型设置字体颜色：叶子=黄色，内部=白色
+            right_text_color = "#FFD700" if tree.right.char else "#FFFFFF"
+            right_node = HuffmanTreeAdapter._append_circle_node(
+                snapshot,
+                f"subtree_right_{id(tree)}",
+                tree.right.freq,
+                right_x,
+                child_y,
+                right_label,
+                color=base_blue,
+                text_color=right_text_color,
+                sub_label_color=label_color,
+                scale=0.75,
             )
-            snapshot.nodes.append(right_node)
             
-            # 添加边
             edge = EdgeSnapshot(
-                from_id=f"queue_{id(tree)}",
-                to_id=f"subtree_right_{id(tree)}",
+                from_id=parent_id or "",
+                to_id=right_node.id,
                 arrow_type="line"
             )
-            edge.from_x = center_x + 15
-            edge.from_y = center_y + 15
-            edge.to_x = right_x - 20
-            edge.to_y = child_y - 20
+            edge.from_x = center_x
+            edge.from_y = center_y
+            edge.to_x = right_x
+            edge.to_y = child_y
             edge.color = "#2E86AB"
             snapshot.edges.append(edge)
     
@@ -3013,10 +3140,10 @@ class HuffmanTreeAdapter:
                 arrow_type="line"
             )
             # 设置连线坐标
-            edge.from_x = node_x - 30  # 从节点左边缘
-            edge.from_y = node_y + 20  # 从节点底部
-            edge.to_x = left_x + 30  # 到子节点右边缘
-            edge.to_y = left_y - 20  # 到子节点顶部
+            edge.from_x = node_x
+            edge.from_y = node_y
+            edge.to_x = left_x
+            edge.to_y = left_y
             
             # 添加"0"标签
             label_x = (edge.from_x + edge.to_x) / 2
@@ -3049,10 +3176,10 @@ class HuffmanTreeAdapter:
                 arrow_type="line"
             )
             # 设置连线坐标
-            edge.from_x = node_x + 30  # 从节点右边缘
-            edge.from_y = node_y + 20  # 从节点底部
-            edge.to_x = right_x - 30  # 到子节点左边缘
-            edge.to_y = right_y - 20  # 到子节点顶部
+            edge.from_x = node_x
+            edge.from_y = node_y
+            edge.to_x = right_x
+            edge.to_y = right_y
             
             # 添加"1"标签
             label_x = (edge.from_x + edge.to_x) / 2
@@ -3187,33 +3314,21 @@ class HuffmanTreeAdapter:
                     node_y = current_y
                     scale = 1.0
                 
-                # 创建节点快照
-                if node.char is not None:
-                    # 叶子节点
-                    node_snapshot = NodeSnapshot(
-                        id=node_id,
-                        value=f"{node.char}\n{node.freq}",
-                        x=node_x,
-                        y=node_y,
-                        node_type="circle",
-                        color="#FF6B6B",
-                        width=int(40 * scale),
-                        height=int(40 * scale)
-                    )
-                else:
-                    # 内部节点
-                    node_snapshot = NodeSnapshot(
-                        id=node_id,
-                        value=str(node.freq),
-                        x=node_x,
-                        y=node_y,
-                        node_type="circle",
-                        color="#4C78A8",
-                        width=int(40 * scale),
-                        height=int(40 * scale)
-                    )
-                
-                snapshot.nodes.append(node_snapshot)
+                label_text = node.char or "*"
+                node_color = "#1f4e79"
+                # 根据节点类型设置字体颜色：叶子=黄色，内部=白色
+                node_text_color = "#FFD700" if node.char else "#FFFFFF"
+                HuffmanTreeAdapter._append_circle_node(
+                    snapshot,
+                    node_id,
+                    node.freq,
+                    node_x,
+                    node_y,
+                    label_text,
+                    color=node_color,
+                    text_color=node_text_color,
+                    scale=scale,
+                )
                 
                 # 添加子节点到下一层
                 if node.left:
@@ -3302,33 +3417,20 @@ class HuffmanTreeAdapter:
         for node, (x, y_pos) in positions.items():
             node_id = f"node_{id(node)}"
             
-            # 创建节点快照
-            if node.char is not None:
-                # 叶子节点 - 只显示权值
-                node_snapshot = NodeSnapshot(
-                    id=node_id,
-                    value=str(node.freq),
-                    x=x - 30,  # 节点中心对齐
-                    y=y_pos - 20,
-                    node_type="box",
-                    width=60,
-                    height=40,
-                    color="#FF6B6B"  # 红色表示叶子节点
-                )
-            else:
-                # 内部节点
-                node_snapshot = NodeSnapshot(
-                    id=node_id,
-                    value=str(node.freq),
-                    x=x - 30,  # 节点中心对齐
-                    y=y_pos - 20,
-                    node_type="box",
-                    width=60,
-                    height=40,
-                    color="#4C78A8"  # 蓝色表示内部节点
-                )
-            
-            snapshot.nodes.append(node_snapshot)
+            label_text = node.char or "*"
+            node_color = "#1f4e79"
+            # 根据节点类型设置字体颜色：叶子=黄色，内部=白色
+            node_text_color = "#FFD700" if node.char else "#FFFFFF"
+            HuffmanTreeAdapter._append_circle_node(
+                snapshot,
+                node_id,
+                node.freq,
+                x,
+                y_pos,
+                label_text,
+                color=node_color,
+                text_color=node_text_color,
+            )
         
         # 添加边
         HuffmanTreeAdapter._add_horizontal_tree_edges(huffman_tree.root, positions, snapshot)
@@ -3630,16 +3732,14 @@ class AVLAdapter:
             snapshot.nodes.append(node_snapshot)
             
             # 添加平衡因子标签
-            bf_text = f"平衡因子={balance_factor}"
-            if is_checking:
-                bf_text += "（检查中）"
+            bf_text = str(balance_factor)
             balance_label = BoxSnapshot(
                 id=f"balance_{node_id}",
                 value=bf_text,
                 x=current_x + 50,  # 节点右侧
                 y=current_y - 10,  # 节点上方
-                width=120,  # 增加宽度以完整显示文字
-                height=25,  # 增加高度以适应文字
+                width=80,
+                height=28,
                 color="#8B4513" if abs(balance_factor) <= 1 else "#FF6B6B",  # 褐色正常，红色失衡
                 text_color="#FFFFFF"
             )
