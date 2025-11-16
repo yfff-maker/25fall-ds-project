@@ -1,9 +1,10 @@
+import os
 from pathlib import Path
 from PyQt5.QtCore import Qt, QSize, pyqtSignal
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QListWidget, QListWidgetItem, QTextEdit, QLabel,
-    QFrame
+    QFrame, QComboBox
 )
 from PyQt5.QtGui import QIcon
 
@@ -11,10 +12,18 @@ from PyQt5.QtGui import QIcon
 class ChatPanel(QWidget):
     """右侧常驻的 LLM 对话面板"""
     sendMessage = pyqtSignal(str)
+    modelChanged = pyqtSignal(str)
+    _DEFAULT_MODELS = [
+        "openai/gpt-3.5-turbo",
+        "openai/gpt-4o-mini",
+        "anthropic/claude-3-haiku"
+    ]
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._build_ui()
+        # 初始触发一次当前模型，确保外部状态同步
+        self.modelChanged.emit(self.current_model())
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
@@ -56,7 +65,12 @@ class ChatPanel(QWidget):
         if send_icon.exists():
             self.btn_send.setIcon(QIcon(str(send_icon)))
             self.btn_send.setIconSize(QSize(18, 18))
+        self.model_combo = QComboBox()
+        self.model_combo.setObjectName("ChatPanelModelCombo")
+        self._init_model_combo()
+        self.model_combo.currentTextChanged.connect(self.modelChanged.emit)
         input_bar.addWidget(self.input_edit, 1)
+        input_bar.addWidget(self.model_combo)
         input_bar.addWidget(self.btn_send)
         layout.addLayout(input_bar)
 
@@ -92,6 +106,20 @@ class ChatPanel(QWidget):
     def clear_history(self):
         self.list_widget.clear()
 
+    def current_model(self) -> str:
+        """获取当前选择的模型名称"""
+        if hasattr(self, "model_combo"):
+            return self.model_combo.currentText().strip()
+        return ""
+
+    def set_model(self, model_name: str):
+        """外部设置模型，保持下拉框同步"""
+        if not model_name:
+            return
+        if self.model_combo.findText(model_name) == -1:
+            self.model_combo.addItem(model_name)
+        self.model_combo.setCurrentText(model_name)
+
     def _add_message(self, text: str, role: str):
         item = QListWidgetItem()
         container = QWidget()
@@ -117,4 +145,11 @@ class ChatPanel(QWidget):
         self.list_widget.addItem(item)
         self.list_widget.setItemWidget(item, container)
         self.list_widget.scrollToBottom()
+
+    def _init_model_combo(self):
+        """初始化模型选项"""
+        default_model = os.getenv("OPENROUTER_MODEL") or self._DEFAULT_MODELS[0]
+        models = list(dict.fromkeys(self._DEFAULT_MODELS + [default_model]))
+        self.model_combo.addItems(models)
+        self.model_combo.setCurrentText(default_model)
 

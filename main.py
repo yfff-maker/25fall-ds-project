@@ -113,6 +113,8 @@ class MainWindow(QMainWindow):
             self.chat_dock.setWidget(self.chat_panel)
             self.addDockWidget(Qt.RightDockWidgetArea, self.chat_dock)
             self.chat_panel.sendMessage.connect(self._on_chat_send)
+            self.chat_panel.modelChanged.connect(self._on_chat_model_changed)
+            self.controller.set_llm_model(self.chat_panel.current_model())
 
             # 选择默认数据结构
             self.select_structure("SequentialList")
@@ -487,19 +489,11 @@ class MainWindow(QMainWindow):
             btn_build.clicked.connect(lambda: self._build_binary_tree(build_line.text().strip()))
             lay.addWidget(btn_build)
             
-            b2 = QPushButton("前序遍历")
-            b2.clicked.connect(lambda: self.controller.traverse_binary_tree("pre"))
-            b3 = QPushButton("中序遍历")
-            b3.clicked.connect(lambda: self.controller.traverse_binary_tree("in"))
-            b4 = QPushButton("后序遍历")
-            b4.clicked.connect(lambda: self.controller.traverse_binary_tree("post"))
-            for b in (b2,b3,b4): lay.addWidget(b)
-            
             # 删除功能
             b5 = QPushButton("删除节点")
             b5.clicked.connect(lambda: self._delete_binary_tree_node(get_value()))
             lay.addWidget(b5)
-            self._mark_secondary(b2, b3, b4, b5)
+            self._mark_secondary(b5)
 
         elif key == "BST":
             # 插入功能
@@ -905,6 +899,10 @@ class MainWindow(QMainWindow):
             self._llm_thread.deleteLater()
             self._llm_thread = None
         self.chat_panel.append_assistant(f"调用出错：{error_msg}")
+
+    def _on_chat_model_changed(self, model: str):
+        """处理模型切换"""
+        self.controller.set_llm_model(model)
 
     def _on_theme_selected(self, mode: ThemeMode):
         """菜单切换主题"""

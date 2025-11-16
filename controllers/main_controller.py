@@ -82,6 +82,7 @@ class MainController(QObject):
         # 初始化LLM服务和动作执行器
         self.llm_service = LLMService()
         self.action_executor = ActionExecutor(self)
+        self.current_llm_model: Optional[str] = self.llm_service.default_model
         
         self._update_snapshot()
     
@@ -1565,7 +1566,9 @@ class MainController(QObject):
                 return False, "未设置OPENROUTER_API_KEY环境变量，请在系统环境变量中设置", None
             
             # 转换为JSON动作
-            action = self.llm_service.convert_natural_language_to_action(user_input)
+            action = self.llm_service.convert_natural_language_to_action(
+                user_input, model=self.get_llm_model()
+            )
             
             if action is None:
                 return False, "LLM转换失败，请检查输入是否明确，或尝试手动输入DSL命令", None
@@ -1595,7 +1598,9 @@ class MainController(QObject):
                 return False, "未设置OPENROUTER_API_KEY环境变量，请在系统环境变量中设置", None
             
             # 转换为JSON动作
-            action = self.llm_service.convert_natural_language_to_action(user_input)
+            action = self.llm_service.convert_natural_language_to_action(
+                user_input, model=self.get_llm_model()
+            )
             
             if action is None:
                 return False, "LLM转换失败，请检查输入是否明确，或尝试手动输入DSL命令", None
@@ -1610,3 +1615,15 @@ class MainController(QObject):
             return False, str(e), None
         except Exception as e:
             return False, f"执行自然语言命令失败: {str(e)}", None
+
+    # ========== LLM 模型管理 ==========
+    def set_llm_model(self, model: Optional[str]):
+        """更新当前使用的LLM模型"""
+        if model and model.strip():
+            self.current_llm_model = model.strip()
+        else:
+            self.current_llm_model = self.llm_service.default_model
+
+    def get_llm_model(self) -> Optional[str]:
+        """获取当前模型，若未设置则返回默认值"""
+        return self.current_llm_model or self.llm_service.default_model
