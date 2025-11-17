@@ -1671,6 +1671,9 @@ class BSTAdapter:
         # 获取动画状态
         animation_state = getattr(bst, '_animation_state', None)
         animation_progress = getattr(bst, '_animation_progress', 0.0)
+        traversal_current_node = getattr(bst, '_traversal_current_node', None)
+        traversal_visited_nodes = set(getattr(bst, '_traversal_visited_nodes', set()) or [])
+        traversal_order = getattr(bst, '_traversal_order', None)
         
         # 添加删除动画的步骤说明
         if animation_state == 'deleting':
@@ -1707,6 +1710,26 @@ class BSTAdapter:
             snapshot.comparison_text = f"未找到要删除的值: {bst._delete_value}"
         else:
             snapshot.comparison_text = ""
+
+        if traversal_order and (traversal_current_node or traversal_visited_nodes):
+            order_map = {
+                'preorder': '前序',
+                'inorder': '中序',
+                'postorder': '后序',
+                'levelorder': '层序'
+            }
+            order_text = order_map.get(traversal_order, '遍历')
+            if traversal_current_node:
+                detail_line = f"{order_text}遍历：访问 {traversal_current_node.value}"
+            else:
+                detail_line = f"{order_text}遍历：已完成"
+            existing_details = snapshot.step_details
+            if existing_details is None:
+                snapshot.step_details = [detail_line]
+            elif isinstance(existing_details, list):
+                snapshot.step_details.append(detail_line)
+            else:
+                snapshot.step_details = [existing_details, detail_line]
         
         # 处理创建根节点动画（必须在检查root之前，因为树为空时也需要显示动画）
         if animation_state == 'creating_root':
@@ -1798,6 +1821,8 @@ class BSTAdapter:
             is_delete_replacement_node = (animation_state == 'deleting' and 
                                         hasattr(bst, '_delete_replacement_node') and 
                                         str(bst._delete_replacement_node) == str(node.value))
+            is_traversal_current = (traversal_current_node is not None and node is traversal_current_node)
+            is_traversal_visited = (not is_traversal_current and node in traversal_visited_nodes)
             
             if is_new_node:
                 # 新节点动画效果
@@ -1818,6 +1843,14 @@ class BSTAdapter:
                     width=60,
                     height=40,
                     color="#FF6B6B"  # 红色表示正在插入的节点
+                )
+            elif is_traversal_current:
+                node_snapshot = BSTAdapter._circle_snapshot(
+                    node_id, str(node.value), x, y_pos, "#FFD700"
+                )
+            elif is_traversal_visited:
+                node_snapshot = BSTAdapter._circle_snapshot(
+                    node_id, str(node.value), x, y_pos, "#FFA500"
                 )
             elif is_searching_node or is_insert_comparing_node:
                 node_snapshot = BSTAdapter._circle_snapshot(
@@ -2090,6 +2123,8 @@ class HuffmanTreeAdapter:
             sub_label=label,
             sub_label_color=sub_label_color,
         )
+        node_snapshot.border_color = "#0B1D40"
+        node_snapshot.border_width = 3
         snapshot.nodes.append(node_snapshot)
         return node_snapshot
     
@@ -2106,6 +2141,7 @@ class HuffmanTreeAdapter:
         progress = getattr(huffman, '_animation_progress', 0.0)
         current_merge = getattr(huffman, '_current_merge_nodes', []) or []
         merged_nodes = set(getattr(huffman, '_merged_nodes', []) or [])
+        highlight_nodes = getattr(huffman, '_highlight_nodes', []) or []
         
         # 取队列（优先用 queue/_queue；否则用 leaves 兜底）
         queue = None
@@ -2152,14 +2188,19 @@ class HuffmanTreeAdapter:
                 return f"leaf_{ch}"
             return f"node_{id(item)}"
         
-        # 选中集合（当前合并的两项，可能是叶子也可能是子树）
+        base_blue = "#1f4e79"
+
+        # 选中集合（当前合并或高亮的两项，可能是叶子也可能是子树）
+        def add_selected(items, bucket: set):
+            for it in items:
+                if isinstance(it, (tuple, list)) or hasattr(it, 'freq'):
+                    bucket.add(item_id(it))
+                else:
+                    bucket.add(f"leaf_{it}")  # 假定字符
+
         selected_ids = set()
-        for it in current_merge:
-            # 兼容传 id / 传对象 / 传字符
-            if isinstance(it, (tuple, list)) or hasattr(it, 'freq'):
-                selected_ids.add(item_id(it))
-            else:
-                selected_ids.add(f"leaf_{it}")  # 假定字符
+        add_selected(current_merge, selected_ids)
+        add_selected(highlight_nodes, selected_ids)
         
         # 队列横向排布
         def queue_pos(i):
@@ -2271,17 +2312,45 @@ class HuffmanTreeAdapter:
         
         # 预计算队列排布
         layout = []  # [(it, id, label, freq, qx, qy), ...]
+        layout_by_id = {}
         for i, it in enumerate(queue):
             iid = item_id(it)
             ch = get_char(it)
             freq = get_freq(it)
             label = ch if ch not in (None, "", "*") else "*"
             qx, qy = queue_pos(i)
-            layout.append((it, iid, label, freq, qx, qy))
+            entry = (it, iid, label, freq, qx, qy)
+            layout.append(entry)
+            layout_by_id[iid] = entry
         
         # 找到被选中两项（按频率排序，决定回队列的中间位置）
         selected = [t for t in layout if t[1] in selected_ids]
         selected = sorted(selected, key=lambda x: x[3])[:2] if selected else []
+
+        highlight_selected = []
+        if state == "huffman_highlight" and highlight_nodes:
+            used_ids = set()
+            for node in highlight_nodes:
+                entry = None
+                try:
+                    nid = item_id(node)
+                    entry = layout_by_id.get(nid)
+                except Exception:
+                    entry = None
+                if not entry:
+                    node_label = get_char(node) or "*"
+                    node_freq = get_freq(node)
+                    for candidate in layout:
+                        if candidate[1] in used_ids:
+                            continue
+                        _, _, cand_label, cand_freq, _, _ = candidate
+                        if cand_label == node_label and cand_freq == node_freq:
+                            entry = candidate
+                            break
+                if entry:
+                    highlight_selected.append(entry)
+                    used_ids.add(entry[1])
+            selected = highlight_selected[:2] if highlight_selected else selected
         
         # 默认回队列位置：两者中点
         mid_x = None
@@ -2309,132 +2378,147 @@ class HuffmanTreeAdapter:
         
         # 2) 对被选中两项做动画
         if len(selected) == 2:
-            (itA, idA, labelA, freqA, ax0, ay0), (itB, idB, labelB, freqB, bx0, by0) = selected
-            
-            # 0.00–0.20 高亮队列中的两个
-            if progress < 0.20:
-                # A
-                if is_tree(itA):
-                    draw_compact_tree(itA, ax0, ay0 - 6, scale=0.85)
-                else:
-                    charA = get_char(itA)
-                    text_colorA = "#FFD700" if charA and charA not in (None, "", "*") else "#FFFFFF"
-                    draw_circle_node(idA, freqA, labelA, ax0, ay0, color="#2ECC71", text_color=text_colorA)
-                # B
-                if is_tree(itB):
-                    draw_compact_tree(itB, bx0, by0 - 6, scale=0.85)
-                else:
-                    charB = get_char(itB)
-                    text_colorB = "#FFD700" if charB and charB not in (None, "", "*") else "#FFFFFF"
-                    draw_circle_node(idB, freqB, labelB, bx0, by0, color="#2ECC71", text_color=text_colorB)
+            if state == "huffman_highlight":
+                highlight_color = "#FF4C4C"
+                for it, iid, label, freq, qx, qy in selected:
+                    if is_tree(it):
+                        draw_compact_tree(it, qx, qy - 6, scale=0.85)
+                    else:
+                        char_val = get_char(it)
+                        text_color = "#FFD700" if char_val and char_val not in (None, "", "*") else "#FFFFFF"
+                        draw_circle_node(iid, freq, label, qx, qy, color=highlight_color, text_color=text_color)
                 if not hasattr(snapshot, 'step_details') or snapshot.step_details is None:
                     snapshot.step_details = []
-                snapshot.step_details.append("选择最小两个节点（高亮）")
-            
-            # 0.20–0.45 漂移到合并区
-            elif progress < 0.45:
-                t = (progress - 0.20) / 0.25
-                ax = lerp(ax0, merge_cx - 70, t); ay = lerp(ay0, merge_cy, t)
-                bx = lerp(bx0, merge_cx + 70, t); by = lerp(by0, merge_cy, t)
-                # A
-                if is_tree(itA):
-                    draw_compact_tree(itA, ax, ay, scale=0.9)
-                else:
-                    charA = get_char(itA)
-                    text_colorA = "#FFD700" if charA and charA not in (None, "", "*") else "#FFFFFF"
-                    draw_circle_node(idA, freqA, labelA, ax, ay, color="#2ECC71", text_color=text_colorA)
-                # B
-                if is_tree(itB):
-                    draw_compact_tree(itB, bx, by, scale=0.9)
-                else:
-                    charB = get_char(itB)
-                    text_colorB = "#FFD700" if charB and charB not in (None, "", "*") else "#FFFFFF"
-                    draw_circle_node(idB, freqB, labelB, bx, by, color="#2ECC71", text_color=text_colorB)
-                if not hasattr(snapshot, 'step_details') or snapshot.step_details is None:
-                    snapshot.step_details = []
-                snapshot.step_details.append("漂移到合并区域")
-            
-            # 0.45–0.60 融合 + 父节点出现（绿色）+ 父→子连线
-            elif progress < 0.60:
-                t = (progress - 0.45) / 0.15
-                ax = merge_cx - 70; ay = merge_cy
-                bx = merge_cx + 70; by = merge_cy
-                scale = max(0.5, 1.0 - 0.6 * t)
-                # 两子树在中心缩小
-                if is_tree(itA):
-                    draw_compact_tree(itA, ax, ay, scale=scale)
-                else:
-                    charA = get_char(itA)
-                    text_colorA = "#FFD700" if charA and charA not in (None, "", "*") else "#FFFFFF"
-                    draw_circle_node(idA, freqA, labelA, ax, ay, color="#2ECC71", text_color=text_colorA, scale=scale)
-                if is_tree(itB):
-                    draw_compact_tree(itB, bx, by, scale=scale)
-                else:
-                    charB = get_char(itB)
-                    text_colorB = "#FFD700" if charB and charB not in (None, "", "*") else "#FFFFFF"
-                    draw_circle_node(idB, freqB, labelB, bx, by, color="#2ECC71", text_color=text_colorB, scale=scale)
-                
-                # 父节点（仅渲染用）
-                try:
-                    pfreq = (int(freqA) if str(freqA).isdigit() else freqA) + \
-                            (int(freqB) if str(freqB).isdigit() else freqB)
-                except (ValueError, TypeError):
-                    pfreq = freqA + freqB
-                # 父->子连线（连接到两棵子树的根）
-                # 父节点是新生成的内部节点，使用白色字体
-                draw_circle_node("par_tmp", pfreq, "*", merge_cx, merge_cy, color="#1f4e79", text_color="#FFFFFF")
-                # 父→A根
-                eL = EdgeSnapshot(from_id="", to_id="", arrow_type="arrow")
-                eL.from_x, eL.from_y = merge_cx, merge_cy
-                eL.to_x,   eL.to_y   = ax, ay
-                eL.color = "#2E86AB"
-                snapshot.edges.append(eL)
-                # 父→B根
-                eR = EdgeSnapshot(from_id="", to_id="", arrow_type="arrow")
-                eR.from_x, eR.from_y = merge_cx, merge_cy
-                eR.to_x,   eR.to_y   = bx, by
-                eR.color = "#2E86AB"
-                snapshot.edges.append(eR)
-                
-                if not hasattr(snapshot, 'step_details') or snapshot.step_details is None:
-                    snapshot.step_details = []
-                snapshot.step_details.append("融合生成新节点")
-            
-            # 0.60–0.80 父节点回到队列中点，旧两项淡出
-            elif progress < 0.80:
-                t = (progress - 0.60) / 0.20
-                # 父节点作为"新树根"回队列中点
-                rx = lerp(merge_cx, mid_x if mid_x is not None else merge_cx, t)
-                ry = lerp(merge_cy, y, t)
-                # 将两棵子树作为左右孩子临时绘制成一棵新小树（仅渲染不改结构）
-                class _Pair(object):
-                    pass
-                parent = _Pair()
-                parent.char = "*"
-                try:
-                    parent.freq = (int(freqA) if str(freqA).isdigit() else freqA) + \
-                                  (int(freqB) if str(freqB).isdigit() else freqB)
-                except (ValueError, TypeError):
-                    parent.freq = freqA + freqB
-                parent.left = itA
-                parent.right = itB
-                draw_compact_tree(parent, rx, ry, scale=0.9)
-                
-                # 旧位置两项可淡灰（历史痕迹）
-                if not is_tree(itA):
-                    draw_circle_node(idA, freqA, labelA, ax0, ay0, color="#3a3a3a", text_color="#c0c0c0", sub_label_color="#c0c0c0")
-                if not is_tree(itB):
-                    draw_circle_node(idB, freqB, labelB, bx0, by0, color="#3a3a3a", text_color="#c0c0c0", sub_label_color="#c0c0c0")
-                
-                if not hasattr(snapshot, 'step_details') or snapshot.step_details is None:
-                    snapshot.step_details = []
-                snapshot.step_details.append("新节点回到队列")
-            
-            # 0.80–1.00 等下一轮（队列静态，父节点已就位）
+                snapshot.step_details.append("选中最小两个节点（红色填充 2 秒）")
             else:
-                if not hasattr(snapshot, 'step_details') or snapshot.step_details is None:
-                    snapshot.step_details = []
-                snapshot.step_details.append("等待下一轮合并")
+                (itA, idA, labelA, freqA, ax0, ay0), (itB, idB, labelB, freqB, bx0, by0) = selected
+                
+                # 0.00–0.20 高亮队列中的两个
+                if progress < 0.20:
+                    # A
+                    if is_tree(itA):
+                        draw_compact_tree(itA, ax0, ay0 - 6, scale=0.85)
+                    else:
+                        charA = get_char(itA)
+                        text_colorA = "#FFD700" if charA and charA not in (None, "", "*") else "#FFFFFF"
+                        draw_circle_node(idA, freqA, labelA, ax0, ay0, color=base_blue, text_color=text_colorA)
+                    # B
+                    if is_tree(itB):
+                        draw_compact_tree(itB, bx0, by0 - 6, scale=0.85)
+                    else:
+                        charB = get_char(itB)
+                        text_colorB = "#FFD700" if charB and charB not in (None, "", "*") else "#FFFFFF"
+                        draw_circle_node(idB, freqB, labelB, bx0, by0, color=base_blue, text_color=text_colorB)
+                    if not hasattr(snapshot, 'step_details') or snapshot.step_details is None:
+                        snapshot.step_details = []
+                    snapshot.step_details.append("选择最小两个节点（高亮）")
+                
+                # 0.20–0.45 漂移到合并区
+                elif progress < 0.45:
+                    t = (progress - 0.20) / 0.25
+                    ax = lerp(ax0, merge_cx - 70, t); ay = lerp(ay0, merge_cy, t)
+                    bx = lerp(bx0, merge_cx + 70, t); by = lerp(by0, merge_cy, t)
+                    # A
+                    if is_tree(itA):
+                        draw_compact_tree(itA, ax, ay, scale=0.9)
+                    else:
+                        charA = get_char(itA)
+                        text_colorA = "#FFD700" if charA and charA not in (None, "", "*") else "#FFFFFF"
+                        draw_circle_node(idA, freqA, labelA, ax, ay, color=base_blue, text_color=text_colorA)
+                    # B
+                    if is_tree(itB):
+                        draw_compact_tree(itB, bx, by, scale=0.9)
+                    else:
+                        charB = get_char(itB)
+                        text_colorB = "#FFD700" if charB and charB not in (None, "", "*") else "#FFFFFF"
+                        draw_circle_node(idB, freqB, labelB, bx, by, color=base_blue, text_color=text_colorB)
+                    if not hasattr(snapshot, 'step_details') or snapshot.step_details is None:
+                        snapshot.step_details = []
+                    snapshot.step_details.append("漂移到合并区域")
+                
+                # 0.45–0.60 融合 + 父节点出现（绿色）+ 父→子连线
+                elif progress < 0.60:
+                    t = (progress - 0.45) / 0.15
+                    ax = merge_cx - 70; ay = merge_cy
+                    bx = merge_cx + 70; by = merge_cy
+                    scale = max(0.5, 1.0 - 0.6 * t)
+                    # 两子树在中心缩小
+                    if is_tree(itA):
+                        draw_compact_tree(itA, ax, ay, scale=scale)
+                    else:
+                        charA = get_char(itA)
+                        text_colorA = "#FFD700" if charA and charA not in (None, "", "*") else "#FFFFFF"
+                        draw_circle_node(idA, freqA, labelA, ax, ay, color=base_blue, text_color=text_colorA, scale=scale)
+                    if is_tree(itB):
+                        draw_compact_tree(itB, bx, by, scale=scale)
+                    else:
+                        charB = get_char(itB)
+                        text_colorB = "#FFD700" if charB and charB not in (None, "", "*") else "#FFFFFF"
+                        draw_circle_node(idB, freqB, labelB, bx, by, color=base_blue, text_color=text_colorB, scale=scale)
+                    
+                    # 父节点（仅渲染用）
+                    try:
+                        pfreq = (int(freqA) if str(freqA).isdigit() else freqA) + \
+                                (int(freqB) if str(freqB).isdigit() else freqB)
+                    except (ValueError, TypeError):
+                        pfreq = freqA + freqB
+                    # 父->子连线（连接到两棵子树的根）
+                    # 父节点是新生成的内部节点，使用白色字体
+                    draw_circle_node("par_tmp", pfreq, "*", merge_cx, merge_cy, color="#1f4e79", text_color="#FFFFFF")
+                    # 父→A根
+                    eL = EdgeSnapshot(from_id="", to_id="", arrow_type="arrow")
+                    eL.from_x, eL.from_y = merge_cx, merge_cy
+                    eL.to_x,   eL.to_y   = ax, ay
+                    eL.color = "#2E86AB"
+                    snapshot.edges.append(eL)
+                    # 父→B根
+                    eR = EdgeSnapshot(from_id="", to_id="", arrow_type="arrow")
+                    eR.from_x, eR.from_y = merge_cx, merge_cy
+                    eR.to_x,   eR.to_y   = bx, by
+                    eR.color = "#2E86AB"
+                    snapshot.edges.append(eR)
+                    
+                    if not hasattr(snapshot, 'step_details') or snapshot.step_details is None:
+                        snapshot.step_details = []
+                    snapshot.step_details.append("融合生成新节点")
+                
+                # 0.60–0.80 父节点回到队列中点，旧两项淡出
+                elif progress < 0.80:
+                    t = (progress - 0.60) / 0.20
+                    # 父节点作为"新树根"回队列中点
+                    offset_x = 180
+                    offset_y = 120
+                    rx = lerp(merge_cx + offset_x, mid_x if mid_x is not None else merge_cx, t)
+                    ry = lerp(merge_cy + offset_y, y, t)
+                    # 将两棵子树作为左右孩子临时绘制成一棵新小树（仅渲染不改结构）
+                    class _Pair(object):
+                        pass
+                    parent = _Pair()
+                    parent.char = "*"
+                    try:
+                        parent.freq = (int(freqA) if str(freqA).isdigit() else freqA) + \
+                                      (int(freqB) if str(freqB).isdigit() else freqB)
+                    except (ValueError, TypeError):
+                        parent.freq = freqA + freqB
+                    parent.left = itA
+                    parent.right = itB
+                    draw_compact_tree(parent, rx, ry, scale=0.9)
+                    
+                    # 旧位置两项可淡灰（历史痕迹）
+                    if not is_tree(itA):
+                        draw_circle_node(idA, freqA, labelA, ax0, ay0, color="#3a3a3a", text_color="#c0c0c0", sub_label_color="#c0c0c0")
+                    if not is_tree(itB):
+                        draw_circle_node(idB, freqB, labelB, bx0, by0, color="#3a3a3a", text_color="#c0c0c0", sub_label_color="#c0c0c0")
+                    
+                    if not hasattr(snapshot, 'step_details') or snapshot.step_details is None:
+                        snapshot.step_details = []
+                    snapshot.step_details.append("新节点回到队列")
+                
+                # 0.80–1.00 等下一轮（队列静态，父节点已就位）
+                else:
+                    if not hasattr(snapshot, 'step_details') or snapshot.step_details is None:
+                        snapshot.step_details = []
+                    snapshot.step_details.append("等待下一轮合并")
         
         # 禁用：接近完成时在右侧绘制整棵树
         
@@ -3603,19 +3687,29 @@ class AVLAdapter:
                     apply_rotation()
         
         # 添加比较信息
+        comparison_detail = None
         if animation_state == 'inserting' and hasattr(avl, '_insert_comparison_result') and avl._insert_comparison_result:
             if avl._insert_comparison_result == 'less':
                 snapshot.comparison_text = f"新值 {avl._new_value} < 当前值 {avl._current_search_node_value} → 左"
+                comparison_detail = f"比较: 新值 {avl._new_value} < 当前 {avl._current_search_node_value} → 左"
             elif avl._insert_comparison_result == 'greater':
                 snapshot.comparison_text = f"新值 {avl._new_value} > 当前值 {avl._current_search_node_value} → 右"
+                comparison_detail = f"比较: 新值 {avl._new_value} > 当前 {avl._current_search_node_value} → 右"
             else:
                 snapshot.comparison_text = f"新值 {avl._new_value} = 当前值 {avl._current_search_node_value} → 已存在"
+                comparison_detail = f"比较: 新值 {avl._new_value} = 当前 {avl._current_search_node_value}"
         else:
             snapshot.comparison_text = ""
         
+        step_details = []
+        if comparison_detail:
+            step_details.append(comparison_detail)
+        comparing_value = getattr(avl, '_current_search_node_value', None)
+        insert_comp_result = getattr(avl, '_insert_comparison_result', None)
+        
         # 添加旋转类型提示
         if hasattr(avl, '_rotation_type') and avl._rotation_type:
-            snapshot.step_details = f"旋转类型: {avl._rotation_type}型"
+            step_details.append(f"旋转类型: {avl._rotation_type}型")
         
         if not avl.root:
             return snapshot
@@ -3650,6 +3744,13 @@ class AVLAdapter:
                            str(avl._current_check_node_value) == str(node.value))
             
             # 确定节点颜色和边框（简化逻辑，只保留失衡节点高亮）
+            is_comparing_node = (
+                animation_state == 'inserting'
+                and insert_comp_result
+                and comparing_value is not None
+                and str(comparing_value) == str(node.value)
+            )
+            
             if node in imbalance_nodes:
                 # 失衡节点（平衡因子为±2）- 整个节点填充红色
                 node_color = "#FF0000"
@@ -3657,6 +3758,10 @@ class AVLAdapter:
             elif node in imbalance_children:
                 # 失衡节点的重子节点 - 整个节点填充黄色
                 node_color = "#FFFF00"
+                border_color = None
+            elif is_comparing_node:
+                # 阶段1比较路径节点 - 使用黄色高亮
+                node_color = "#FFD700"
                 border_color = None
             else:
                 # 其他所有节点（包括新插入、比较、旋转节点）- 深蓝色
@@ -3697,6 +3802,9 @@ class AVLAdapter:
                 text_color="#FFFFFF"
             )
             snapshot.boxes.append(balance_label)
+        
+        if step_details:
+            snapshot.step_details = step_details
         
         # 生成边快照
         AVLAdapter._add_edges(avl.root, positions, snapshot)

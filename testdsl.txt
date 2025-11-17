@@ -1,0 +1,3 @@
+create linkedlist with 10,20,30,40
+insert 15 at 1 in linkedlist
+delete at 2 from linkedlist

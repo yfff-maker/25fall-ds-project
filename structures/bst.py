@@ -2,6 +2,7 @@
 """
 二叉搜索树数据结构：纯业务逻辑实现
 """
+from collections import deque
 from .base import BaseStructure
 
 class BSTModel(BaseStructure):
@@ -53,10 +54,28 @@ class BSTModel(BaseStructure):
         self._delete_replacement_node = None  # 替换节点（用于两子节点情况）
         self._delete_case = None  # 删除情况：'no_children', 'one_child', 'two_children'
 
+        # 遍历动画相关属性
+        self._traversal_order = None
+        self._traversal_sequence = []
+        self._traversal_current_index = -1
+        self._traversal_current_node = None
+        self._traversal_visited_nodes = set()
+
+        self._reset_traversal_state()
+
+    def _reset_traversal_state(self):
+        """重置遍历动画状态"""
+        self._traversal_order = None
+        self._traversal_sequence = []
+        self._traversal_current_index = -1
+        self._traversal_current_node = None
+        self._traversal_visited_nodes = set()
+
     def insert(self, value):
         """插入节点到BST"""
         if not self.active or value is None:
             return
+        self._reset_traversal_state()
         
         try:
             v = float(value)
@@ -149,6 +168,7 @@ class BSTModel(BaseStructure):
         """删除节点"""
         if not self.active or value is None:
             return
+        self._reset_traversal_state()
         
         if self.root is None:
             # 树为空，设置错误状态
@@ -240,6 +260,7 @@ class BSTModel(BaseStructure):
     def clear(self):
         """清空树"""
         self.root = None
+        self._reset_traversal_state()
 
     def traverse_inorder(self):
         """中序遍历"""
@@ -319,6 +340,7 @@ class BSTModel(BaseStructure):
         """带动画的查找方法"""
         if not self.active or value is None or self.root is None:
             return False
+        self._reset_traversal_state()
         
         try:
             v = float(value)
@@ -487,6 +509,97 @@ class BSTModel(BaseStructure):
                 self._delete_comparison_result = 'equal'
                 # 找到要删除的节点，分析删除情况
                 self._analyze_delete_case()
+
+    # ===== 遍历动画 =====
+    def start_traversal(self, order: str) -> bool:
+        """启动指定顺序的遍历动画"""
+        if not self.active or self.root is None:
+            return False
+        order = (order or "").lower()
+        self._reset_traversal_state()
+        sequence = self._generate_traversal_sequence(order)
+        if not sequence:
+            return False
+        self._animation_state = 'traversing'
+        self._animation_progress = 0.0
+        self._traversal_order = order
+        self._traversal_sequence = sequence
+        self._traversal_current_index = -1
+        self._traversal_current_node = None
+        self._traversal_visited_nodes = set()
+        return True
+
+    def update_traversal_animation(self, progress):
+        """根据进度更新遍历动画"""
+        if self._animation_state != 'traversing':
+            return
+        self._animation_progress = max(0.0, min(1.0, progress))
+        total = len(self._traversal_sequence)
+        if total == 0:
+            return
+        idx = min(int(self._animation_progress * total), total - 1)
+        if idx != self._traversal_current_index:
+            if 0 <= self._traversal_current_index < total:
+                prev_node = self._traversal_sequence[self._traversal_current_index]
+                self._traversal_visited_nodes.add(prev_node)
+            if idx - self._traversal_current_index > 1:
+                start = max(self._traversal_current_index + 1, 0)
+                for hop in range(start, idx):
+                    self._traversal_visited_nodes.add(self._traversal_sequence[hop])
+            self._traversal_current_index = idx
+            self._traversal_current_node = self._traversal_sequence[idx]
+
+    def complete_traversal_animation(self):
+        """结束遍历动画，保留访问过节点的着色"""
+        if self._animation_state == 'traversing':
+            if 0 <= self._traversal_current_index < len(self._traversal_sequence):
+                self._traversal_visited_nodes.add(self._traversal_sequence[self._traversal_current_index])
+        self._traversal_current_node = None
+        self._animation_state = None
+        self._animation_progress = 0.0
+
+    def _generate_traversal_sequence(self, order: str):
+        """生成遍历顺序（节点对象列表）"""
+        seq = []
+        if order == 'preorder':
+            self._collect_preorder(self.root, seq)
+        elif order == 'inorder':
+            self._collect_inorder(self.root, seq)
+        elif order == 'postorder':
+            self._collect_postorder(self.root, seq)
+        elif order == 'levelorder':
+            queue = deque([self.root])
+            while queue:
+                node = queue.popleft()
+                if not node:
+                    continue
+                seq.append(node)
+                if node.left:
+                    queue.append(node.left)
+                if node.right:
+                    queue.append(node.right)
+        return seq
+
+    def _collect_preorder(self, node, seq):
+        if not node:
+            return
+        seq.append(node)
+        self._collect_preorder(node.left, seq)
+        self._collect_preorder(node.right, seq)
+
+    def _collect_inorder(self, node, seq):
+        if not node:
+            return
+        self._collect_inorder(node.left, seq)
+        seq.append(node)
+        self._collect_inorder(node.right, seq)
+
+    def _collect_postorder(self, node, seq):
+        if not node:
+            return
+        self._collect_postorder(node.left, seq)
+        self._collect_postorder(node.right, seq)
+        seq.append(node)
     
     def _analyze_delete_case(self):
         """分析删除情况"""
@@ -591,3 +704,4 @@ class BSTModel(BaseStructure):
         self._last_search_node_value = None
         self._search_path = []
         self._current_search_step = 0
+        self._reset_traversal_state()

@@ -2,6 +2,7 @@
 """
 哈夫曼树数据结构：纯业务逻辑实现
 """
+import time
 from .base import BaseStructure
 
 class HuffmanTreeModel(BaseStructure):
@@ -116,6 +117,13 @@ class HuffmanTreeModel(BaseStructure):
     def __init__(self):
         super().__init__()
         self.root = None
+        
+        # 高亮阶段状态
+        self._highlight_nodes = []
+        self._highlight_active = False
+        self._highlight_start_time = 0.0
+        self._highlight_elapsed_ms = 0.0
+        self._highlight_duration_ms = 2000
 
     def build(self, freq_map):
         """构建哈夫曼树"""
@@ -136,6 +144,7 @@ class HuffmanTreeModel(BaseStructure):
         self._current_queue = []  # 当前队列中的节点/子树
         self._queue_trees = []  # 队列中每个元素对应的树结构
         self._build_complete = False  # 构建是否完成
+        self._reset_highlight_state()
         
         # 初始化队列
         sorted_items = sorted(freq_map.items(), key=lambda x: x[1])
@@ -256,6 +265,39 @@ class HuffmanTreeModel(BaseStructure):
     def clear(self):
         """清空树"""
         self.root = None
+        self._reset_highlight_state()
+
+    def _reset_highlight_state(self):
+        """重置节点高亮阶段状态"""
+        self._highlight_nodes = []
+        self._highlight_active = False
+        self._highlight_start_time = 0.0
+        self._highlight_elapsed_ms = 0.0
+        self._highlight_duration_ms = 2000
+
+    def start_highlight_phase(self, nodes, duration_ms=2000):
+        """记录选中节点的高亮阶段"""
+        self._highlight_duration_ms = max(0, duration_ms)
+        self._highlight_nodes = list(nodes) if nodes else []
+        self._highlight_active = bool(self._highlight_nodes)
+        self._highlight_start_time = time.time() * 1000.0 if self._highlight_active else 0.0
+        self._highlight_elapsed_ms = 0.0
+        if self._highlight_active:
+            self._animation_state = "huffman_highlight"
+            self._animation_progress = 0.0
+
+    def update_highlight_elapsed(self, elapsed_ms):
+        """更新高亮阶段经过的时间"""
+        self._highlight_elapsed_ms = max(0.0, elapsed_ms)
+
+    def end_highlight_phase(self):
+        """结束高亮阶段"""
+        self._highlight_nodes = []
+        self._highlight_active = False
+        self._highlight_start_time = 0.0
+        self._highlight_elapsed_ms = 0.0
+        if getattr(self, "_animation_state", None) == "huffman_highlight":
+            self._animation_state = None
     
     def update_animation_progress(self, progress):
         """更新动画进度"""

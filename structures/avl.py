@@ -37,8 +37,8 @@ class AVLModel(BaseStructure):
         self._current_check_bf = None
         self._rotation_plan = None        # {'type': 'LL'|..., 'nodes': [...]} 用于动画展示
         # 插入动画阶段：比较 -> 检查 -> 高亮提示 -> 旋转
-        # 将高亮提示阶段时长扩展为原来的5倍，以便用户有更多时间观察失衡节点
-        self._phase_breaks = (0.0279, 0.0558, 0.3058, 1.0)
+        # 在先前加长基础上再延长3倍，使红/黄节点停留时间更久
+        self._phase_breaks = (0.0279, 0.0558, 0.8058, 1.0)
         self._insert_committed = False    # 是否已将真实节点插入但未旋转
         self._rotation_applied = False    # 是否已执行计划中的旋转
 
@@ -506,6 +506,10 @@ class AVLModel(BaseStructure):
             self._rotation_type = None
             self._rotation_nodes = []
             return
+        else:
+            if self._current_search_node_value is not None or self._insert_comparison_result is not None:
+                self._current_search_node_value = None
+                self._insert_comparison_result = None
         
         # 阶段2：自底向上检查BF
         if prog < p2 and self._check_path_rev:

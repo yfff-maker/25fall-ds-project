@@ -534,6 +534,21 @@ class MainWindow(QMainWindow):
             lay.addWidget(b3)
             self._mark_secondary(search_btn, b3)
 
+            # 遍历功能
+            traversal_layout = QHBoxLayout()
+            btn_pre = QPushButton("前序遍历")
+            btn_pre.clicked.connect(self.controller.traverse_bst_preorder)
+            btn_in = QPushButton("中序遍历")
+            btn_in.clicked.connect(self.controller.traverse_bst_inorder)
+            btn_post = QPushButton("后序遍历")
+            btn_post.clicked.connect(self.controller.traverse_bst_postorder)
+            btn_level = QPushButton("层序遍历")
+            btn_level.clicked.connect(self.controller.traverse_bst_levelorder)
+            for btn in (btn_pre, btn_in, btn_post, btn_level):
+                traversal_layout.addWidget(btn)
+            lay.addLayout(traversal_layout)
+            self._mark_secondary(btn_pre, btn_in, btn_post, btn_level)
+
         elif key == "AVL":
             # 插入功能
             lay.addWidget(input_line)

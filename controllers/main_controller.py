@@ -1088,6 +1088,82 @@ class MainController(QObject):
             self.log_operation(f"[BST] 删除节点 {value}")
         except Exception as e:
             self._show_error("删除失败", str(e))
+
+    def traverse_bst_preorder(self):
+        self._start_bst_traversal('preorder')
+
+    def traverse_bst_inorder(self):
+        self._start_bst_traversal('inorder')
+
+    def traverse_bst_postorder(self):
+        self._start_bst_traversal('postorder')
+
+    def traverse_bst_levelorder(self):
+        self._start_bst_traversal('levelorder')
+
+    def _start_bst_traversal(self, order: str):
+        """启动BST遍历动画"""
+        try:
+            structure = self._get_current_structure()
+            if not structure or not hasattr(structure, 'start_traversal'):
+                self._show_warning("请先选择BST结构")
+                return
+
+            if not structure.start_traversal(order):
+                self._show_warning("当前BST为空，无法遍历")
+                return
+
+            total_nodes = len(getattr(structure, '_traversal_sequence', []))
+            if total_nodes <= 0:
+                self._show_warning("没有可遍历的节点")
+                return
+
+            self._restart_animation_timer(lambda: self._update_bst_traversal_animation(structure), 50)
+            self._animation_duration = max(total_nodes, 1) * 800  # 每个节点约0.8秒
+            self._animation_start_time = 0
+
+            order_map = {
+                'preorder': '前序',
+                'inorder': '中序',
+                'postorder': '后序',
+                'levelorder': '层序'
+            }
+            order_text = order_map.get(order, '遍历')
+
+            self._update_snapshot()
+            self.hint_updated.emit(f"{order_text}遍历进行中...")
+            self.log_operation(f"[BST] {order_text}遍历")
+        except Exception as e:
+            self._show_error("遍历失败", str(e))
+
+    def _update_bst_traversal_animation(self, structure):
+        """更新BST遍历动画"""
+        import time
+
+        if self._animation_start_time == 0:
+            self._animation_start_time = time.time() * 1000  # 毫秒
+
+        current_time = time.time() * 1000
+        elapsed = current_time - self._animation_start_time
+
+        progress = min(elapsed / self._animation_duration, 1.0)
+        structure.update_traversal_animation(progress)
+
+        self._update_snapshot()
+
+        if progress >= 1.0:
+            self._animation_timer.stop()
+            structure.complete_traversal_animation()
+            self._update_snapshot()
+            order_map = {
+                'preorder': '前序',
+                'inorder': '中序',
+                'postorder': '后序',
+                'levelorder': '层序'
+            }
+            order_text = order_map.get(getattr(structure, '_traversal_order', ''), '遍历')
+            self.hint_updated.emit(f"{order_text}遍历完成")
+            self.log_operation(f"[BST] {order_text}遍历完成")
     
     # ========== 哈夫曼树操作 ==========
     
@@ -1187,11 +1263,58 @@ class MainController(QObject):
         
         # 设置本轮动画状态，让适配器渲染"高亮/漂移/融合/回队列"
         structure._current_merge_nodes = [a, b]
+        
+        highlight_ms = 2000
+        if hasattr(structure, "start_highlight_phase"):
+            structure.start_highlight_phase([a, b], duration_ms=highlight_ms)
+        else:
+            structure._animation_state = "huffman_highlight"
+            structure._animation_progress = 0.0
+            structure._highlight_nodes = [a, b]
+            structure._highlight_duration_ms = highlight_ms
+        self._start_huffman_highlight(structure, highlight_ms)
+
+    def _start_huffman_highlight(self, structure, duration_ms):
+        """启动红色高亮阶段"""
+        if duration_ms <= 0:
+            if hasattr(structure, "end_highlight_phase"):
+                structure.end_highlight_phase()
+            self._start_huffman_merge_animation(structure)
+            return
+        self._update_snapshot()
+        self._restart_animation_timer(lambda: self._update_huffman_highlight(structure), 50)
+        self._animation_duration = duration_ms
+        self._animation_start_time = 0
+
+    def _update_huffman_highlight(self, structure):
+        """维护选中节点高亮阶段"""
+        import time
+
+        if self._animation_start_time == 0:
+            self._animation_start_time = time.time() * 1000.0
+        now = time.time() * 1000.0
+        elapsed = now - self._animation_start_time
+        duration = max(1.0, getattr(structure, "_highlight_duration_ms", self._animation_duration or 2000))
+        progress = min(elapsed / duration, 1.0)
+
+        structure._animation_progress = progress
+        if hasattr(structure, "update_highlight_elapsed"):
+            structure.update_highlight_elapsed(elapsed)
+
+        self._update_snapshot()
+
+        if progress >= 1.0:
+            self._animation_timer.stop()
+            if hasattr(structure, "end_highlight_phase"):
+                structure.end_highlight_phase()
+            self._start_huffman_merge_animation(structure)
+
+    def _start_huffman_merge_animation(self, structure):
+        """红色高亮结束后启动原有合并动画"""
         structure._animation_state = "huffman_merging"
         structure._animation_progress = 0.0
         self._update_snapshot()
-        
-        # 计时器：放慢节奏（100ms tick，10000ms 总时长）
+
         self._restart_animation_timer(lambda: self._update_huffman_animation(structure), 100)
         self._animation_duration = 10000
         self._animation_start_time = 0
@@ -1243,6 +1366,8 @@ class MainController(QObject):
                 structure._merged_nodes.add(get_node_id(a))
                 structure._merged_nodes.add(get_node_id(b))
                 structure._current_merge_nodes = []
+                if hasattr(structure, "end_highlight_phase"):
+                    structure.end_highlight_phase()
             
             # 若只剩 1 个，收尾；否则继续下一轮
             if len(q) == 1:
