@@ -3706,10 +3706,14 @@ class AVLAdapter:
             step_details.append(comparison_detail)
         comparing_value = getattr(avl, '_current_search_node_value', None)
         insert_comp_result = getattr(avl, '_insert_comparison_result', None)
+        rotation_type = getattr(avl, '_rotation_type', None)
+        rotation_nodes = getattr(avl, '_rotation_nodes', []) or []
+        rotation_detail_added = False
         
         # 添加旋转类型提示
         if hasattr(avl, '_rotation_type') and avl._rotation_type:
             step_details.append(f"旋转类型: {avl._rotation_type}型")
+            rotation_detail_added = True
         
         if not avl.root:
             return snapshot
@@ -3717,6 +3721,161 @@ class AVLAdapter:
         # 使用改进的布局算法
         positions = AVLAdapter._layout_tree(
             avl.root, start_x, y, level_height, node_width, min_spacing)
+        # 旋转阶段插值：使用未旋转影子树位置与当前树位置进行插值
+        rotation_progress = getattr(avl, '_rotation_anim_progress', 0.0)
+        shadow_root = getattr(avl, '_shadow_after_insert', None)
+
+        def _clone_simple(node):
+            if not node:
+                return None
+            nn = type("TmpNode", (), {})()
+            nn.value = getattr(node, "value", None)
+            nn.left = _clone_simple(getattr(node, "left", None))
+            nn.right = _clone_simple(getattr(node, "right", None))
+            return nn
+
+        def _rotate_left_at(root_node, target_val):
+            if not root_node:
+                return root_node
+            if root_node.value == target_val:
+                x = root_node
+                y = x.right
+                if not y:
+                    return x
+                x.right = y.left
+                y.left = x
+                return y
+            if target_val < root_node.value:
+                root_node.left = _rotate_left_at(root_node.left, target_val)
+            else:
+                root_node.right = _rotate_left_at(root_node.right, target_val)
+            return root_node
+
+        def _rotate_right_at(root_node, target_val):
+            if not root_node:
+                return root_node
+            if root_node.value == target_val:
+                y = root_node
+                x = y.left
+                if not x:
+                    return y
+                y.left = x.right
+                x.right = y
+                return x
+            if target_val < root_node.value:
+                root_node.left = _rotate_right_at(root_node.left, target_val)
+            else:
+                root_node.right = _rotate_right_at(root_node.right, target_val)
+            return root_node
+
+        def _layout_snapshot(root_node):
+            if not root_node:
+                return {}
+            return AVLAdapter._layout_tree(
+                root_node, start_x, y, level_height, node_width, min_spacing
+            )
+
+        # 预布局（旋转前）
+        pre_positions = {}
+        if shadow_root is not None:
+            pre_positions = _layout_snapshot(shadow_root)
+
+        # 中间布局（两段动画）
+        mid_positions = {}
+        if shadow_root is not None and rotation_type:
+            cloned_root = _clone_simple(shadow_root)
+            if rotation_type == "LL":
+                mid_root = _rotate_right_at(cloned_root, rotation_nodes[0] if rotation_nodes else None)
+            elif rotation_type == "RR":
+                mid_root = _rotate_left_at(cloned_root, rotation_nodes[0] if rotation_nodes else None)
+            elif rotation_type == "LR":
+                # 先对子节点左旋
+                child_val = rotation_nodes[1] if len(rotation_nodes) > 1 else None
+                if child_val is not None:
+                    cloned_root = _rotate_left_at(cloned_root, child_val)
+                mid_root = cloned_root
+            elif rotation_type == "RL":
+                # 先对子节点右旋
+                child_val = rotation_nodes[1] if len(rotation_nodes) > 1 else None
+                if child_val is not None:
+                    cloned_root = _rotate_right_at(cloned_root, child_val)
+                mid_root = cloned_root
+            else:
+                mid_root = cloned_root
+            mid_positions = _layout_snapshot(mid_root)
+
+        # 最终布局（当前真实树）
+        final_positions = positions
+
+        def _pos_map(layout):
+            return {str(n.value): pos for n, pos in layout.items()} if layout else {}
+
+        pre_map = _pos_map(pre_positions)
+        mid_map = _pos_map(mid_positions)
+        final_map = _pos_map(final_positions)
+
+        render_positions = {}
+        for node, final_pos in final_positions.items():
+            key = str(getattr(node, "value", ""))
+            if rotation_progress <= 0.0:
+                render_positions[node] = pre_map.get(key, final_pos)
+            elif rotation_progress < 0.5 and mid_positions:
+                t = rotation_progress / 0.5
+                start_pos = pre_map.get(key, final_pos)
+                mid_pos = mid_map.get(key, final_pos)
+                rx = start_pos[0] + (mid_pos[0] - start_pos[0]) * t
+                ry = start_pos[1] + (mid_pos[1] - start_pos[1]) * t
+                render_positions[node] = (rx, ry)
+            elif rotation_progress < 1.0 and mid_positions:
+                t = (rotation_progress - 0.5) / 0.5
+                mid_pos = mid_map.get(key, final_pos)
+                end_pos = final_map.get(key, final_pos)
+                rx = mid_pos[0] + (end_pos[0] - mid_pos[0]) * t
+                ry = mid_pos[1] + (end_pos[1] - mid_pos[1]) * t
+                render_positions[node] = (rx, ry)
+            else:
+                render_positions[node] = final_pos
+        rotation_active = (
+            animation_state == 'inserting'
+            and rotation_type is not None
+            and animation_progress >= phase_breaks[2]
+        )
+        # 旋转步骤描述（更细粒度）
+        if rotation_type and not rotation_detail_added:
+            if rotation_type == 'LL':
+                step_details.extend([
+                    "LL右旋：以失衡节点为支点",
+                    "步骤1：提升左子节点为新根",
+                    "步骤2：原根成为右子节点"
+                ])
+            elif rotation_type == 'RR':
+                step_details.extend([
+                    "RR左旋：以失衡节点为支点",
+                    "步骤1：提升右子节点为新根",
+                    "步骤2：原根成为左子节点"
+                ])
+            elif rotation_type == 'LR':
+                step_details.extend([
+                    "LR双旋：先对左子节点左旋，再对根右旋",
+                    "步骤1：左子节点左旋让孙节点上升",
+                    "步骤2：根节点右旋完成平衡"
+                ])
+            elif rotation_type == 'RL':
+                step_details.extend([
+                    "RL双旋：先对右子节点右旋，再对根左旋",
+                    "步骤1：右子节点右旋让孙节点上升",
+                    "步骤2：根节点左旋完成平衡"
+                ])
+        # 双步提示的当前阶段
+        if rotation_active and rotation_progress < 0.5 and rotation_type in ("LR", "RL"):
+            step_details.append("旋转阶段：第1步进行中")
+        elif rotation_active and rotation_progress >= 0.5 and rotation_type in ("LR", "RL"):
+            step_details.append("旋转阶段：第2步进行中")
+        elif rotation_active and rotation_type in ("LL", "RR"):
+            if rotation_progress < 0.5:
+                step_details.append("旋转阶段：准备旋转")
+            else:
+                step_details.append("旋转阶段：完成旋转")
         
         # 在生成节点快照前，先收集失衡节点信息
         imbalance_nodes = set()  # 平衡因子为±2的节点集合
@@ -3734,7 +3893,10 @@ class AVLAdapter:
                     imbalance_children.add(node.right)
         
         # 生成节点快照
-        for node, (x, y_pos) in positions.items():
+        pivot_val = rotation_nodes[0] if rotation_nodes else None
+        heavy_val = rotation_nodes[1] if len(rotation_nodes) > 1 else None
+        grand_val = rotation_nodes[2] if len(rotation_nodes) > 2 else None
+        for node, (x, y_pos) in render_positions.items():
             node_id = f"node_{id(node)}"
             
             # 计算平衡因子
@@ -3759,6 +3921,15 @@ class AVLAdapter:
                 # 失衡节点的重子节点 - 整个节点填充黄色
                 node_color = "#FFFF00"
                 border_color = None
+            elif rotation_active and pivot_val is not None and str(node.value) == str(pivot_val):
+                node_color = "#FF6B6B"
+                border_color = "#1f4e79"
+            elif rotation_active and heavy_val is not None and str(node.value) == str(heavy_val):
+                node_color = "#FFA500"
+                border_color = "#1f4e79"
+            elif rotation_active and grand_val is not None and str(node.value) == str(grand_val):
+                node_color = "#FFD27F"
+                border_color = "#1f4e79"
             elif is_comparing_node:
                 # 阶段1比较路径节点 - 使用黄色高亮
                 node_color = "#FFD700"
@@ -3802,12 +3973,27 @@ class AVLAdapter:
                 text_color="#FFFFFF"
             )
             snapshot.boxes.append(balance_label)
+            
+            # 在旋转阶段为支点添加方向标注
+            if rotation_active and pivot_val is not None and str(node.value) == str(pivot_val):
+                arrow_text = "右旋" if rotation_type in ("LL", "LR") else "左旋"
+                label_box = BoxSnapshot(
+                    id=f"rotate_label_{node_id}",
+                    value=arrow_text,
+                    x=current_x - 25,
+                    y=current_y - 60,
+                    width=60,
+                    height=22,
+                    color="#FF6B6B",
+                    text_color="#FFFFFF"
+                )
+                snapshot.boxes.append(label_box)
         
         if step_details:
             snapshot.step_details = step_details
         
         # 生成边快照
-        AVLAdapter._add_edges(avl.root, positions, snapshot)
+        AVLAdapter._add_edges(avl.root, render_positions, snapshot)
         
         # 显示根指针 - 放在根节点上方
         root_pointer_x = start_x - 30  # 与根节点中心对齐

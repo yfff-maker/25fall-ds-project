@@ -1718,8 +1718,8 @@ class MainController(QObject):
                 # 使用定时器实现平滑动画
                 self._restart_animation_timer(lambda: self._update_avl_animation(structure), 50)
                 
-                # 设置动画总时长
-                self._animation_duration = 2000  # 2秒总时长
+                # 设置动画总时长（放慢以便初学者观察）
+                self._animation_duration = 3200  # 3.2秒总时长
                 self._animation_start_time = 0
                 
                 self._update_snapshot()

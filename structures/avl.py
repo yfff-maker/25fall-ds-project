@@ -25,6 +25,9 @@ class AVLModel(BaseStructure):
         self._imbalance_node_value = None  # 失衡节点值
         self._rotation_type = None  # 旋转类型：'LL', 'RR', 'LR', 'RL'
         self._rotation_nodes = []  # 参与旋转的节点值列表
+        # 旋转可视化辅助：插入后未旋转的影子树 & 旋转阶段插值进度
+        self._shadow_after_insert = None
+        self._rotation_anim_progress = 0.0
         self._insert_path = []  # 插入路径（节点值列表）
         self._current_insert_step = 0  # 当前插入步骤
         self._insert_comparison_result = None  # 插入比较结果
@@ -79,6 +82,8 @@ class AVLModel(BaseStructure):
         shadow_root = self._clone_tree(self.root)
         shadow_root = self._shadow_insert_no_rotate(shadow_root, v)  # 使用不旋转的版本，以便分析失衡节点
         self._rotation_plan = self._analyze_first_imbalance_and_rotation(shadow_root)
+        # 记录未旋转的影子树，用于可视化插值
+        self._shadow_after_insert = shadow_root
         self._insert_committed = False
         self._rotation_applied = False
         
@@ -483,6 +488,8 @@ class AVLModel(BaseStructure):
         self._animation_progress = max(0.0, min(1.0, progress))
         p1, p2, p3, p4 = self._phase_breaks
         prog = self._animation_progress
+        # 默认旋转插值进度
+        self._rotation_anim_progress = 0.0
 
         # 从阶段2开始，真实树需要展示插入后的未旋转状态
         if prog >= p1:
@@ -538,6 +545,11 @@ class AVLModel(BaseStructure):
             return
         
         # 阶段4：旋转细节动画（位置插值交由适配器处理）
+        # 计算旋转插值进度，用于可视化（0~1）
+        if p4 > p3:
+            self._rotation_anim_progress = max(0.0, min(1.0, (prog - p3) / (p4 - p3)))
+        else:
+            self._rotation_anim_progress = 1.0
         if self._rotation_plan and not self._rotation_applied:
             self._rotation_type = self._rotation_plan['type']
             self._rotation_nodes = self._rotation_plan['nodes']
@@ -556,6 +568,8 @@ class AVLModel(BaseStructure):
             self._animation_state = None
             self._new_value = None
             self._animation_progress = 0.0
+            self._shadow_after_insert = None
+            self._rotation_anim_progress = 0.0
         elif self._animation_state == 'inserting' and self._new_value is not None:
             # 确保真实结构已经包含新节点
             self._ensure_insert_committed()
@@ -577,6 +591,8 @@ class AVLModel(BaseStructure):
             self._rotation_nodes = []
             self._insert_committed = False
             self._rotation_applied = False
+            self._shadow_after_insert = None
+            self._rotation_anim_progress = 0.0
 
     def cancel_animation(self):
         """取消动画"""
@@ -597,6 +613,10 @@ class AVLModel(BaseStructure):
         self._rotation_plan = None
         self._insert_committed = False
         self._rotation_applied = False
+        self._shadow_after_insert = None
+        self._rotation_anim_progress = 0.0
+        self._shadow_after_insert = None
+        self._rotation_anim_progress = 0.0
 
     def update_animation_progress(self, progress):
         """更新动画进度"""
