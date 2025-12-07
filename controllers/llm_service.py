@@ -23,7 +23,12 @@ class LLMService:
         """检查API密钥是否已设置"""
         return self.api_key is not None and len(self.api_key.strip()) > 0
     
-    def convert_natural_language_to_action(self, user_input: str, model: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    def convert_natural_language_to_action(
+        self,
+        user_input: str,
+        model: Optional[str] = None,
+        operations_context: Optional[List[Dict[str, Any]]] = None
+    ) -> Optional[Dict[str, Any]]:
         """
         将自然语言转换为JSON动作
         
@@ -44,8 +49,8 @@ class LLMService:
             raise ValueError("未设置OPENROUTER_API_KEY环境变量")
         
         try:
-            # 构建prompt
-            prompt = self._build_prompt(user_input)
+            # 构建prompt，附带可选的历史操作上下文
+            prompt = self._build_prompt(user_input, operations_context)
             
             # 使用OpenRouter API
             model_to_use = model or self.default_model
@@ -109,9 +114,9 @@ class LLMService:
             print(f"LLM API调用错误: {e}")
             return None
     
-    def _build_prompt(self, user_input: str) -> str:
+    def _build_prompt(self, user_input: str, operations_context: Optional[List[Dict[str, Any]]] = None) -> str:
         """构建系统prompt"""
-        return """你是一个数据结构可视化系统的AI助手。你的任务是将用户的自然语言描述转换为JSON格式的动作指令。
+        base_prompt = """你是一个数据结构可视化系统的AI助手。你的任务是将用户的自然语言描述转换为JSON格式的动作指令。
 
 支持的数据结构类型：
 - SequentialList (顺序表)
@@ -171,4 +176,18 @@ class LLMService:
 应返回：{"structure_type": "BST", "operation": "insert", "parameters": {"value": "25"}}
 
 现在请根据用户的输入，返回对应的JSON动作指令："""
+        # 如果提供了上下文操作历史，将其追加到 prompt，帮助模型在已有操作基础上继续
+        if operations_context:
+            try:
+                context_json = json.dumps(operations_context, ensure_ascii=False, indent=2)
+            except Exception:
+                context_json = str(operations_context)
+            context_block = (
+                "\n\n以下是已经执行过的操作历史（JSON数组，按先后顺序），请基于这些操作后的状态继续规划下一步动作，"
+                "不要重复执行已完成的步骤，仅返回下一步的动作JSON：\n"
+                f"{context_json}\n"
+            )
+        else:
+            context_block = ""
+        return base_prompt + context_block
 

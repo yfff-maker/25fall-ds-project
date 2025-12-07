@@ -87,6 +87,7 @@ class MainController(QObject):
         # 初始化LLM服务和动作执行器
         self.llm_service = LLMService()
         self.action_executor = ActionExecutor(self)
+        self.llm_context_actions: List[Dict[str, Any]] = []  # 供LLM参考的已有操作上下文
         self._animation_timer: Optional[QTimer] = None
         self.current_llm_model: Optional[str] = self.llm_service.default_model
         
@@ -201,11 +202,17 @@ class MainController(QObject):
         """构建顺序表"""
         try:
             data = self._parse_comma_separated_values(input_text)
+            values_list = list(data)
             structure = self._get_current_structure()
             if structure:
-                structure.build(data)
+                structure.build(values_list)
                 self._update_snapshot()
                 text_repr = input_text.strip() if isinstance(input_text, str) else str(input_text)
+                self._pending_llm_action = {
+                    "structure_type": "SequentialList",
+                    "operation": "create",
+                    "parameters": {"values": values_list},
+                }
                 self.log_operation(f"[顺序表] 构建数据: {text_repr or '(空)'}")
         except Exception as e:
             self._show_error("构建顺序表失败", str(e))
@@ -218,6 +225,11 @@ class MainController(QObject):
                 # 开始插入动画
                 structure.insert_at(position, value)
                 self._update_snapshot()
+                self._pending_llm_action = {
+                    "structure_type": "SequentialList",
+                    "operation": "insert",
+                    "parameters": {"position": position, "value": value},
+                }
                 self.log_operation(f"[顺序表] 在位置 {position} 插入值 {value}")
                 
                 # 使用定时器实现平滑动画
@@ -238,6 +250,11 @@ class MainController(QObject):
                 # 开始删除动画
                 structure.delete_at(position)
                 self._update_snapshot()
+                self._pending_llm_action = {
+                    "structure_type": "SequentialList",
+                    "operation": "delete",
+                    "parameters": {"position": position},
+                }
                 self.log_operation(f"[顺序表] 删除位置 {position} 的元素")
                 
                 # 使用定时器实现平滑动画
@@ -291,12 +308,18 @@ class MainController(QObject):
         """构建链表"""
         try:
             data_generator = self._parse_comma_separated_values(input_text)
+            values_list = list(data_generator)
             structure = self._get_current_structure()
             if structure:
                 # 开始构建动画
-                structure.build(data_generator)
+                structure.build(values_list)
                 self._update_snapshot()
                 text_repr = input_text.strip() if isinstance(input_text, str) else str(input_text)
+                self._pending_llm_action = {
+                    "structure_type": "LinkedList",
+                    "operation": "create",
+                    "parameters": {"values": values_list},
+                }
                 self.log_operation(f"[链表] 构建数据: {text_repr or '(空)'}")
                 
                 # 使用定时器实现平滑动画
@@ -316,6 +339,11 @@ class MainController(QObject):
                 # 开始插入动画
                 structure.insert(position, value)
                 self._update_snapshot()
+                self._pending_llm_action = {
+                    "structure_type": "LinkedList",
+                    "operation": "insert",
+                    "parameters": {"position": position, "value": value},
+                }
                 self.log_operation(f"[链表] 在位置 {position} 插入值 {value}")
                 
                 # 使用定时器实现平滑动画
@@ -335,6 +363,11 @@ class MainController(QObject):
                 # 启动删除动画
                 structure.delete_at(position)
                 self._update_snapshot()
+                self._pending_llm_action = {
+                    "structure_type": "LinkedList",
+                    "operation": "delete",
+                    "parameters": {"position": position},
+                }
                 self.log_operation(f"[链表] 删除位置 {position} 的元素")
                 
                 # 使用定时器实现平滑动画
@@ -357,6 +390,11 @@ class MainController(QObject):
             if structure and value:
                 structure.insert_at_end(value)
                 self._update_snapshot()
+                self._pending_llm_action = {
+                    "structure_type": "LinkedList",
+                    "operation": "insert_tail",
+                    "parameters": {"value": value},
+                }
                 self.log_operation(f"[链表] 在尾部插入值 {value}")
         except Exception as e:
             self._show_error("尾部插入失败", str(e))
@@ -368,6 +406,11 @@ class MainController(QObject):
             if structure and value:
                 structure.delete_by_value(value)
                 self._update_snapshot()
+                self._pending_llm_action = {
+                    "structure_type": "LinkedList",
+                    "operation": "delete_by_value",
+                    "parameters": {"value": value},
+                }
                 self.log_operation(f"[链表] 删除值 {value}")
         except Exception as e:
             self._show_error("按值删除失败", str(e))
@@ -382,6 +425,11 @@ class MainController(QObject):
                 # 开始入栈动画
                 structure.push(value)
                 self._update_snapshot()
+                self._pending_llm_action = {
+                    "structure_type": "Stack",
+                    "operation": "push",
+                    "parameters": {"value": value},
+                }
                 self.log_operation(f"[栈] Push 值 {value}")
                 
                 # 检查是否是栈满状态
@@ -588,6 +636,11 @@ class MainController(QObject):
             if not self._bst_build_queue:
                 self._show_warning("请输入有效的节点值")
                 return
+            self._pending_llm_action = {
+                "structure_type": "BST",
+                "operation": "build",
+                "parameters": {"values": list(self._bst_build_queue)},
+            }
             self.log_operation(f"[BST] 批量构建: {', '.join(str(v) for v in self._bst_build_queue)}")
             
             # 立即更新视图，确保切换到BST视图可见（即使树为空）
@@ -624,6 +677,11 @@ class MainController(QObject):
             if not self._avl_build_queue:
                 self._show_warning("请输入有效的节点值")
                 return
+            self._pending_llm_action = {
+                "structure_type": "AVL",
+                "operation": "build",
+                "parameters": {"values": list(self._avl_build_queue)},
+            }
             self.log_operation(f"[AVL] 批量构建: {', '.join(str(v) for v in self._avl_build_queue)}")
             
             # 立即更新视图，确保切换到AVL视图可见（即使树为空）
@@ -649,6 +707,11 @@ class MainController(QObject):
                 # 开始出栈动画
                 structure.pop()
                 self._update_snapshot()
+                self._pending_llm_action = {
+                    "structure_type": "Stack",
+                    "operation": "pop",
+                    "parameters": {},
+                }
                 self.log_operation("[栈] Pop 栈顶元素")
                 
                 # 使用定时器实现平滑动画
@@ -668,6 +731,11 @@ class MainController(QObject):
             if structure:
                 structure.clear()
                 self._update_snapshot()
+                self._pending_llm_action = {
+                    "structure_type": "Stack",
+                    "operation": "clear",
+                    "parameters": {},
+                }
                 self.log_operation("[栈] 清空所有元素")
         except Exception as e:
             self._show_error("清空栈失败", str(e))
@@ -679,9 +747,15 @@ class MainController(QObject):
             structure = self._get_current_structure()
             if structure:
                 # 开始构建动画
-                structure.build(data)
+                data_list = list(data)
+                structure.build(data_list)
                 self._update_snapshot()
                 text_repr = input_text.strip() if isinstance(input_text, str) else str(input_text)
+                self._pending_llm_action = {
+                    "structure_type": "Stack",
+                    "operation": "create",
+                    "parameters": {"values": data_list},
+                }
                 self.log_operation(f"[栈] 批量构建: {text_repr or '(空)'}")
                 
                 # 检查是否是栈满状态
@@ -788,6 +862,11 @@ class MainController(QObject):
                     self._animation_start_time = 0
                     
                     self._update_snapshot()
+                    self._pending_llm_action = {
+                        "structure_type": "BinaryTree",
+                        "operation": "insert",
+                        "parameters": {"value": value, "parent_value": parent_value, "position": position},
+                    }
                     self.log_operation(f"[二叉树] 在节点 {parent_value} 的{position}子节点插入 {value}")
             else:
                 # 需要用户选择父节点
@@ -864,6 +943,11 @@ class MainController(QObject):
                     break
             
             self._update_snapshot()
+            self._pending_llm_action = {
+                "structure_type": "BinaryTree",
+                "operation": "build_level",
+                "parameters": {"values": list(values)},
+            }
             self.log_operation(f"[二叉树] 层序构建: {', '.join(map(str, values))}")
             
         except Exception as e:
@@ -912,6 +996,11 @@ class MainController(QObject):
             self._animation_start_time = 0
             
             self._update_snapshot()
+            self._pending_llm_action = {
+                "structure_type": "BinaryTree",
+                "operation": "insert",
+                "parameters": {"value": value, "parent_value": parent_value, "position": position},
+            }
             self.log_operation(f"[二叉树] 在节点 {parent_value} 的{position}侧插入 {value}")
             
         except Exception as e:
@@ -940,6 +1029,11 @@ class MainController(QObject):
             if success:
                 self._update_snapshot()
                 self.hint_updated.emit(f"已删除节点: {value} 及其子树")
+                self._pending_llm_action = {
+                    "structure_type": "BinaryTree",
+                    "operation": "delete",
+                    "parameters": {"value": value},
+                }
                 self.log_operation(f"[二叉树] 删除节点 {value} 及其子树")
             else:
                 self._show_error("删除失败", "删除操作失败")
@@ -969,6 +1063,11 @@ class MainController(QObject):
                 self._animation_start_time = 0
                 
                 self._update_snapshot()
+                self._pending_llm_action = {
+                    "structure_type": "BST",
+                    "operation": "insert",
+                    "parameters": {"value": value},
+                }
                 self.log_operation(f"[BST] 插入节点 {value}")
         except Exception as e:
             self._show_error("插入失败", str(e))
@@ -992,6 +1091,11 @@ class MainController(QObject):
                     self._animation_start_time = 0
                     
                     self._update_snapshot()
+                    self._pending_llm_action = {
+                        "structure_type": "BST",
+                        "operation": "search",
+                        "parameters": {"value": value},
+                    }
                     self.log_operation(f"[BST] 搜索节点 {value}")
                 else:
                     self._show_warning("树为空或值无效")
@@ -1085,6 +1189,11 @@ class MainController(QObject):
             self._animation_start_time = 0
             
             self._update_snapshot()
+            self._pending_llm_action = {
+                "structure_type": "BST",
+                "operation": "delete",
+                "parameters": {"value": value},
+            }
             self.log_operation(f"[BST] 删除节点 {value}")
         except Exception as e:
             self._show_error("删除失败", str(e))
@@ -1132,6 +1241,11 @@ class MainController(QObject):
 
             self._update_snapshot()
             self.hint_updated.emit(f"{order_text}遍历进行中...")
+            self._pending_llm_action = {
+                "structure_type": "BST",
+                "operation": f"traverse_{order}",
+                "parameters": {},
+            }
             self.log_operation(f"[BST] {order_text}遍历")
         except Exception as e:
             self._show_error("遍历失败", str(e))
@@ -1179,6 +1293,11 @@ class MainController(QObject):
                     freq_repr = freq_text.strip()
                 else:
                     freq_repr = str(freq_text)
+                self._pending_llm_action = {
+                    "structure_type": "HuffmanTree",
+                    "operation": "build",
+                    "parameters": {"frequencies": freq_repr},
+                }
                 self.log_operation(f"[哈夫曼树] 构建频率: {freq_repr or '(空)'}")
                 
                 # 启动哈夫曼树动画
@@ -1314,7 +1433,7 @@ class MainController(QObject):
         structure._animation_state = "huffman_merging"
         structure._animation_progress = 0.0
         self._update_snapshot()
-
+        
         self._restart_animation_timer(lambda: self._update_huffman_animation(structure), 100)
         self._animation_duration = 10000
         self._animation_start_time = 0
@@ -1493,6 +1612,18 @@ class MainController(QObject):
         if len(self._operation_logs) > 200:
             self._operation_logs.pop(0)
         self.operation_logged.emit(entry)
+        # 附带：尝试将操作写入 LLM 上下文（若已标注结构和动作）
+        # 使用统一的暂存键 _pending_llm_action 由调用方设置
+        pending = getattr(self, "_pending_llm_action", None)
+        if pending and isinstance(pending, dict):
+            try:
+                self._record_llm_action(
+                    pending.get("structure_type"),
+                    pending.get("operation"),
+                    pending.get("parameters", {}),
+                )
+            finally:
+                self._pending_llm_action = None
     
     def get_operation_logs(self) -> List[str]:
         """获取操作日志历史"""
@@ -1503,6 +1634,22 @@ class MainController(QObject):
         if self._operation_logs:
             self._operation_logs.clear()
         self.operation_log_cleared.emit()
+
+    # 统一写入 LLM 上下文的内部辅助
+    def _record_llm_action(self, structure_type: str, operation: str, parameters: Optional[Dict[str, Any]] = None):
+        if not structure_type or not operation:
+            return
+        if not hasattr(self, "llm_context_actions"):
+            self.llm_context_actions = []
+        action = {
+            "structure_type": structure_type,
+            "operation": operation,
+            "parameters": parameters if isinstance(parameters, dict) else {},
+        }
+        self.llm_context_actions.append(action)
+        # 控制列表长度，防止过大
+        if len(self.llm_context_actions) > 300:
+            self.llm_context_actions = self.llm_context_actions[-300:]
     
     # ========== DSL功能 ==========
     
@@ -1576,6 +1723,11 @@ class MainController(QObject):
                 self._animation_start_time = 0
                 
                 self._update_snapshot()
+                self._pending_llm_action = {
+                    "structure_type": "AVL",
+                    "operation": "insert",
+                    "parameters": {"value": value},
+                }
                 self.log_operation(f"[AVL] 插入节点 {value}")
         except Exception as e:
             self._show_error("插入失败", str(e))
@@ -1640,6 +1792,11 @@ class MainController(QObject):
                 structure._new_value = None
                 structure._rotation_plan = None
                 self._update_snapshot()
+                self._pending_llm_action = {
+                    "structure_type": "AVL",
+                    "operation": "clear",
+                    "parameters": {},
+                }
                 self.log_operation("[AVL] 清空整棵树")
         except Exception as e:
             self._show_error("清空失败", str(e))
@@ -1701,7 +1858,9 @@ class MainController(QObject):
             
             # 转换为JSON动作
             action = self.llm_service.convert_natural_language_to_action(
-                user_input, model=self.get_llm_model()
+                user_input,
+                model=self.get_llm_model(),
+                operations_context=self.llm_context_actions
             )
             
             if action is None:
@@ -1733,7 +1892,9 @@ class MainController(QObject):
             
             # 转换为JSON动作
             action = self.llm_service.convert_natural_language_to_action(
-                user_input, model=self.get_llm_model()
+                user_input,
+                model=self.get_llm_model(),
+                operations_context=self.llm_context_actions
             )
             
             if action is None:
@@ -1761,3 +1922,54 @@ class MainController(QObject):
     def get_llm_model(self) -> Optional[str]:
         """获取当前模型，若未设置则返回默认值"""
         return self.current_llm_model or self.llm_service.default_model
+
+    # ========== LLM 上下文管理 ==========
+    def load_llm_context_from_file(self, path: str) -> Tuple[bool, str, int]:
+        """
+        从JSON文件加载已执行操作列表，作为LLM上下文参考
+        支持两种格式：
+        1) 纯数组: [{structure_type, operation, parameters}, ...]
+        2) 包含 operations/actions 字段的对象: {"operations": [...]} 或 {"actions": [...]}
+        """
+        try:
+            import json
+            import os
+            if not path or not os.path.exists(path):
+                return False, "文件不存在", 0
+
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            ops = None
+            if isinstance(data, list):
+                ops = data
+            elif isinstance(data, dict):
+                ops = data.get("operations") or data.get("actions")
+
+            if not isinstance(ops, list):
+                raise ValueError("JSON格式需为数组，或包含 operations/actions 数组字段")
+
+            validated = []
+            for op in ops:
+                if not isinstance(op, dict):
+                    continue
+                st = op.get("structure_type")
+                op_name = op.get("operation")
+                params = op.get("parameters", {})
+                if st and op_name:
+                    validated.append({
+                        "structure_type": st,
+                        "operation": op_name,
+                        "parameters": params if isinstance(params, dict) else {}
+                    })
+
+            self.llm_context_actions = validated
+            self.hint_updated.emit(f"已加载 {len(validated)} 条操作作为LLM上下文")
+            return True, f"已加载 {len(validated)} 条上下文操作", len(validated)
+        except Exception as e:
+            return False, f"加载LLM上下文失败: {e}", 0
+
+    def clear_llm_context(self):
+        """清空LLM上下文操作列表"""
+        self.llm_context_actions = []
+        self.hint_updated.emit("已清空LLM上下文操作")

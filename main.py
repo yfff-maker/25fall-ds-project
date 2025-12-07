@@ -310,6 +310,15 @@ class MainWindow(QMainWindow):
             act.triggered.connect(lambda checked, m=mode: self._on_theme_selected(m))
             self._theme_actions[mode] = act
 
+        # AI / LLM 相关菜单
+        ai_menu = menubar.addMenu("AI/LLM")
+        act_import_ctx = QAction("导入LLM上下文(JSON)", self)
+        act_import_ctx.triggered.connect(self._action_import_llm_context)
+        ai_menu.addAction(act_import_ctx)
+        act_clear_ctx = QAction("清空LLM上下文", self)
+        act_clear_ctx.triggered.connect(self._action_clear_llm_context)
+        ai_menu.addAction(act_clear_ctx)
+
     def _action_open(self):
         path, _ = QFileDialog.getOpenFileName(self, "打开工程", "", "Data Structure Vis (*.dsv);;JSON (*.json);;All Files (*)")
         if not path:
@@ -345,6 +354,28 @@ class MainWindow(QMainWindow):
             self.setWindowTitle(f"数据结构可视化模拟器 - {path}")
         except Exception as e:
             QMessageBox.critical(self, "错误", f"保存失败: {e}")
+
+    def _action_import_llm_context(self):
+        """从JSON文件导入已执行操作，为LLM提供上下文"""
+        path, _ = QFileDialog.getOpenFileName(self, "导入LLM上下文", "", "JSON (*.json);;All Files (*)")
+        if not path:
+            return
+        success, msg, count = self.controller.load_llm_context_from_file(path)
+        if success:
+            QMessageBox.information(self, "LLM上下文", msg)
+            try:
+                # 在对话面板提示
+                if hasattr(self, "chat_panel") and self.chat_panel:
+                    self.chat_panel.append_assistant(f"已载入 {count} 条操作作为上下文，后续对话将基于此继续。")
+            except Exception:
+                pass
+        else:
+            QMessageBox.warning(self, "LLM上下文", msg)
+
+    def _action_clear_llm_context(self):
+        """手动清空LLM上下文操作列表"""
+        self.controller.clear_llm_context()
+        QMessageBox.information(self, "LLM上下文", "已清空LLM上下文")
 
     def _clear_dynamic_panel(self):
         while self.dynamic_layout.count():
