@@ -61,33 +61,49 @@ class Canvas(QObject):
         self.view.setRenderHint(QPainter.Antialiasing, True)
         self.view.setRenderHint(QPainter.TextAntialiasing, True)
         self.view.setRenderHint(QPainter.SmoothPixmapTransform, True)
+        self.view.setStyleSheet(
+            """
+            QGraphicsView {
+                background: #f7f9fc;
+                border: 0px;
+            }
+            """
+        )
+        base_font = QFont("Segoe UI", 11)
+        base_font.setWeight(QFont.Medium)
+        self.view.setFont(base_font)
+
         self.hint_label = QGraphicsTextItem("")
-        self.hint_label.setDefaultTextColor(Qt.gray)
-        self.hint_label.setPos(10, 10)
+        hint_font = QFont(base_font)
+        hint_font.setPointSize(12)
+        hint_font.setWeight(QFont.DemiBold)
+        self.hint_label.setFont(hint_font)
+        self.hint_label.setDefaultTextColor(QColor("#4B5563"))
+        self.hint_label.setPos(14, 14)
         self.scene.addItem(self.hint_label)
         
         # 比较信息标签（右下角）
         self.comparison_label = QGraphicsTextItem("")
-        self.comparison_label.setDefaultTextColor(Qt.blue)
-        font = QFont()
-        font.setPointSize(12)
-        font.setBold(True)
+        self.comparison_label.setDefaultTextColor(QColor("#2563EB"))
+        font = QFont(base_font)
+        font.setPointSize(13)
+        font.setWeight(QFont.DemiBold)
         self.comparison_label.setFont(font)
         self.scene.addItem(self.comparison_label)
         
         # 步骤说明标签（右下角）
         self.step_details_label = QGraphicsTextItem("")
-        self.step_details_label.setDefaultTextColor(Qt.darkGreen)
-        font = QFont()
-        font.setPointSize(10)
+        self.step_details_label.setDefaultTextColor(QColor("#0F766E"))
+        font = QFont(base_font)
+        font.setPointSize(11)
         self.step_details_label.setFont(font)
         self.scene.addItem(self.step_details_label)
         
         # 操作历史记录标签（左侧）
         self.operation_history_label = QGraphicsTextItem("")
-        self.operation_history_label.setDefaultTextColor(Qt.darkBlue)
-        font = QFont()
-        font.setPointSize(9)
+        self.operation_history_label.setDefaultTextColor(QColor("#1D4ED8"))
+        font = QFont(base_font)
+        font.setPointSize(10)
         self.operation_history_label.setFont(font)
         self.scene.addItem(self.operation_history_label)
 
@@ -202,6 +218,9 @@ class Canvas(QObject):
         # 使用text_color参数，如果没有则使用默认颜色
         text_color = getattr(box, 'text_color', '#000000')
         label.setDefaultTextColor(QColor(text_color))
+        font = QFont("Segoe UI", 11)
+        font.setWeight(QFont.Medium)
+        label.setFont(font)
         # 居中显示文本
         label_width = label.boundingRect().width()
         label_height = label.boundingRect().height()
@@ -225,13 +244,18 @@ class Canvas(QObject):
         radius = diameter / 2
         circle = QGraphicsEllipseItem(0, 0, diameter, diameter)
         circle.setBrush(QBrush(QColor(node.color)))
-        border_color = getattr(node, 'border_color', Qt.black)
-        border_width = getattr(node, 'border_width', 1)
-        circle.setPen(QPen(QColor(border_color), border_width))
+        border_color = getattr(node, 'border_color', None)
+        border_width = getattr(node, 'border_width', 0)
+        if border_color:
+            circle.setPen(QPen(QColor(border_color), border_width or 2))
+        else:
+            pen = QPen(Qt.transparent, 0)
+            circle.setPen(pen)
         circle.setPos(node.x - radius, node.y - radius)
         
         label = QGraphicsTextItem(node.value)
-        font = QFont(); font.setPointSize(10)
+        font = QFont("Segoe UI", 12)
+        font.setWeight(QFont.DemiBold)
         label.setFont(font)
         value_color = getattr(node, 'text_color', '#FFFFFF')
         label.setDefaultTextColor(QColor(value_color))
@@ -245,7 +269,8 @@ class Canvas(QObject):
         sub_label = getattr(node, 'sub_label', None)
         if sub_label:
             sub_item = QGraphicsTextItem(sub_label)
-            sub_font = QFont(); sub_font.setPointSize(9)
+            sub_font = QFont("Segoe UI", 10)
+            sub_font.setWeight(QFont.Medium)
             sub_item.setFont(sub_font)
             sub_color = getattr(node, 'sub_label_color', '#1f4e79')
             sub_item.setDefaultTextColor(QColor(sub_color))
@@ -283,7 +308,8 @@ class Canvas(QObject):
         
         # 文本标签
         label = QGraphicsTextItem(node.value)
-        font = QFont(); font.setPointSize(12)
+        font = QFont("Segoe UI", 12)
+        font.setWeight(QFont.DemiBold)
         label.setFont(font)
         label.setDefaultTextColor(DEFAULT_TEXT_COLOR)
         label_width = label.boundingRect().width()

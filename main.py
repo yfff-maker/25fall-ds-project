@@ -11,7 +11,7 @@ from PyQt5.QtWidgets import (
     QHBoxLayout, QSpinBox, QDialog, QComboBox, QFileDialog, QAction,
     QActionGroup, QTextEdit
 )
-from PyQt5.QtGui import QFontDatabase, QIcon
+from PyQt5.QtGui import QFontDatabase, QIcon, QFont
 from PyQt5.QtCore import Qt, pyqtSlot, QThread, pyqtSignal
 from canvas import Canvas
 from widgets.control_panel import ControlPanel
@@ -105,6 +105,7 @@ class MainWindow(QMainWindow):
             self.operation_log_dock.setAllowedAreas(Qt.RightDockWidgetArea)
             self.operation_log_dock.setWidget(self.operation_log_panel)
             self.operation_log_dock.setMinimumWidth(260)
+            self.operation_log_dock.setMinimumHeight(200)
             self.addDockWidget(Qt.RightDockWidgetArea, self.operation_log_dock)
             
             # LLM线程管理
@@ -126,8 +127,11 @@ class MainWindow(QMainWindow):
             self.chat_dock.setAllowedAreas(Qt.RightDockWidgetArea)
             self.chat_panel = ChatPanel(self.chat_dock)
             self.chat_dock.setWidget(self.chat_panel)
+            self.chat_dock.setMinimumWidth(260)
+            self.chat_dock.setMinimumHeight(240)
             self.addDockWidget(Qt.RightDockWidgetArea, self.chat_dock)
-            self.splitDockWidget(self.operation_log_dock, self.chat_dock, Qt.Horizontal)
+            # 改为上下分布：上为操作记录，下为LLM对话
+            self.splitDockWidget(self.operation_log_dock, self.chat_dock, Qt.Vertical)
             self.chat_panel.sendMessage.connect(self._on_chat_send)
             self.chat_panel.modelChanged.connect(self._on_chat_model_changed)
             self.controller.set_llm_model(self.chat_panel.current_model())
@@ -1069,6 +1073,9 @@ def main():
     try:
         print("正在初始化QApplication...", file=sys.stderr)
         app = QApplication(sys.argv)
+        base_font = QFont("Segoe UI", 11)
+        base_font.setWeight(QFont.Medium)
+        app.setFont(base_font)
         print("正在创建MainWindow...", file=sys.stderr)
         base_dir = Path(__file__).resolve().parent
         # 注册字体

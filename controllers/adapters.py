@@ -2122,8 +2122,7 @@ class HuffmanTreeAdapter:
             sub_label=label,
             sub_label_color="#1f4e79",
         )
-        ns.border_color = HuffmanTreeAdapter.BORDER
-        ns.border_width = 3
+        # 去掉默认描边，保持简洁
         snapshot.nodes.append(ns)
         return ns
     
@@ -2273,7 +2272,7 @@ class HuffmanTreeAdapter:
         return max(node_w, total)
     
     @staticmethod
-    def to_snapshot(huffman, start_x=120, queue_y=110, merge_cx=680, merge_cy=340, tree_cx=680, tree_y=520) -> StructureSnapshot:
+    def to_snapshot(huffman, start_x=120, queue_y=110, merge_cx=680, merge_cy=420, tree_cx=680, tree_y=640) -> StructureSnapshot:
         snapshot = StructureSnapshot()
 
         state = getattr(huffman, "_animation_state", "idle")
