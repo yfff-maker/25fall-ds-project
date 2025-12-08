@@ -1300,206 +1300,70 @@ class MainController(QObject):
                 }
                 self.log_operation(f"[哈夫曼树] 构建频率: {freq_repr or '(空)'}")
                 
-                # 启动哈夫曼树动画
+                # 启动全新分阶段动画
                 self.start_huffman_animation()
         except Exception as e:
             self._show_error("构建哈夫曼树失败", str(e))
             print(f"构建哈夫曼树错误: {e}")
     
     def start_huffman_animation(self):
-        """启动哈夫曼树动画"""
+        """启动哈夫曼树动画（选择→移动→合并→回队列）"""
         try:
             structure = self.structures.get("HuffmanTree")
             if not structure:
                 self._show_error("启动失败", "未选择或未创建哈夫曼结构")
                 return
+            if not structure.start_animation():
+                # 无需动画（为空或单节点）
+                self._update_snapshot()
+                return
             
-            # 1) 准备初始队列：优先使用结构里已有的 leaves，否则示例 A–E
-            leaves = []
-            if hasattr(structure, "leaves") and structure.leaves:
-                leaves = list(structure.leaves)
-            elif hasattr(structure, "get_leaves"):
-                try:
-                    leaves = list(structure.get_leaves())
-                except Exception:
-                    leaves = []
-            
-            if not leaves:
-                # 从原始频率映射获取
-                freq_map = getattr(structure, '_original_freq_map', {})
-                if freq_map:
-                    leaves = [(char, freq) for char, freq in freq_map.items()]
-                else:
-                    # 没有输入则直接返回，保持空视图
-                    self._huffman_queue = []
-                    structure._queue = []
-                    structure._current_merge_nodes = []
-                    structure._animation_state = None
-                    structure._animation_progress = 0.0
-                    self._update_snapshot()
-                    return
-            
-            # 2) 转为本地队列（控制器维护），同时暴露给适配器
-            q = []
-            for it in leaves:
-                if isinstance(it, (tuple, list)) and len(it) >= 2:
-                    q.append(_HuffNode(it[0], it[1]))
-                else:
-                    ch = getattr(it, "char", "?")
-                    fr = getattr(it, "freq", 0)
-                    q.append(_HuffNode(ch, fr))
-            
-            self._huffman_queue = q
-            structure._queue = q  # 适配器优先读 queue/_queue
-            structure._merged_nodes = set()
-            structure._current_merge_nodes = []
-            structure._animation_state = None
-            structure._animation_progress = 0.0
-            self._update_snapshot()
-            
-            # 3) 启动第一轮合并
-            self._start_huffman_merge_iteration(structure)
+            # 进入第一阶段
+            self._start_huffman_phase(structure)
         except Exception as e:
             self._show_error("启动失败", str(e))
             print(f"启动哈夫曼树动画错误: {e}")
     
-    def _start_huffman_merge_iteration(self, structure):
-        """开始一轮合并"""
-        # 队列中不足 2 个就结束
-        q = getattr(self, "_huffman_queue", None) or []
-        if len(q) < 2:
-            # 若只剩 1 个，作为 root
-            if len(q) == 1:
-                structure.root = q[0]
-                structure._animation_state = "huffman_done"
-                structure._animation_progress = 1.0
-                self._update_snapshot()
+    def _huffman_phase_duration(self, state: str) -> int:
+        """阶段时长（毫秒）"""
+        return {
+            "select": 2200,  # 红色填充 2s
+            "move": 1500,
+            "merge": 1300,
+            "return": 1500,
+        }.get(state, 0)
+
+    def _start_huffman_phase(self, structure):
+        """进入当前阶段并启动定时器"""
+        state = getattr(structure, "_animation_state", "idle")
+        duration = self._huffman_phase_duration(state)
+        if duration <= 0:
+            self._update_snapshot()
             return
-        
-        # 选择两个最小频率（稳定排序后取前两项）
-        q_sorted = sorted(q, key=lambda n: n.freq)
-        a, b = q_sorted[0], q_sorted[1]
-        
-        # 设置本轮动画状态，让适配器渲染"高亮/漂移/融合/回队列"
-        structure._current_merge_nodes = [a, b]
-        
-        highlight_ms = 2000
-        if hasattr(structure, "start_highlight_phase"):
-            structure.start_highlight_phase([a, b], duration_ms=highlight_ms)
-        else:
-            structure._animation_state = "huffman_highlight"
-            structure._animation_progress = 0.0
-            structure._highlight_nodes = [a, b]
-            structure._highlight_duration_ms = highlight_ms
-        self._start_huffman_highlight(structure, highlight_ms)
-
-    def _start_huffman_highlight(self, structure, duration_ms):
-        """启动红色高亮阶段"""
-        if duration_ms <= 0:
-            if hasattr(structure, "end_highlight_phase"):
-                structure.end_highlight_phase()
-            self._start_huffman_merge_animation(structure)
-            return
-        self._update_snapshot()
-        self._restart_animation_timer(lambda: self._update_huffman_highlight(structure), 50)
-        self._animation_duration = duration_ms
+        self._animation_duration = duration
         self._animation_start_time = 0
-
-    def _update_huffman_highlight(self, structure):
-        """维护选中节点高亮阶段"""
-        import time
-
-        if self._animation_start_time == 0:
-            self._animation_start_time = time.time() * 1000.0
-        now = time.time() * 1000.0
-        elapsed = now - self._animation_start_time
-        duration = max(1.0, getattr(structure, "_highlight_duration_ms", self._animation_duration or 2000))
-        progress = min(elapsed / duration, 1.0)
-
-        structure._animation_progress = progress
-        if hasattr(structure, "update_highlight_elapsed"):
-            structure.update_highlight_elapsed(elapsed)
-
-        self._update_snapshot()
-
-        if progress >= 1.0:
-            self._animation_timer.stop()
-            if hasattr(structure, "end_highlight_phase"):
-                structure.end_highlight_phase()
-            self._start_huffman_merge_animation(structure)
-
-    def _start_huffman_merge_animation(self, structure):
-        """红色高亮结束后启动原有合并动画"""
-        structure._animation_state = "huffman_merging"
-        structure._animation_progress = 0.0
+        self._restart_animation_timer(lambda: self._update_huffman_phase(structure), 60)
         self._update_snapshot()
         
-        self._restart_animation_timer(lambda: self._update_huffman_animation(structure), 100)
-        self._animation_duration = 10000
-        self._animation_start_time = 0
-    
-    def _update_huffman_animation(self, structure):
-        """更新哈夫曼树构建动画"""
+    def _update_huffman_phase(self, structure):
+        """驱动单阶段动画进度"""
         import time
         
         if self._animation_start_time == 0:
             self._animation_start_time = time.time() * 1000.0
-        
         now = time.time() * 1000.0
         elapsed = now - self._animation_start_time
         progress = min(elapsed / self._animation_duration, 1.0)
         
-        structure._animation_progress = progress
+        structure.update_animation(progress)
         self._update_snapshot()
         
         if progress >= 1.0:
-            # 完成本轮：合并 a、b → parent，并入队；若只剩一个则成为 root
             self._animation_timer.stop()
-            try:
-                a, b = structure._current_merge_nodes
-            except Exception:
-                a = b = None
-            
-            q = getattr(self, "_huffman_queue", None) or []
-            if a in q:
-                q.remove(a)
-            if b in q:
-                q.remove(b)
-            
-            if a and b:
-                parent = _HuffNode("*", a.freq + b.freq, left=a, right=b)
-                q.append(parent)
-                structure._queue = q  # 让适配器看到最新队列
-                
-                # 标记已合并的节点（使用与适配器一致的 ID 格式）
-                if not hasattr(structure, '_merged_nodes'):
-                    structure._merged_nodes = set()
-                
-                # 生成与适配器一致的 ID：leaf_{char} 或 node_{id}
-                def get_node_id(node):
-                    ch = getattr(node, "char", None)
-                    if ch not in (None, "", "*"):
-                        return f"leaf_{ch}"
-                    return f"node_{id(node)}"
-                
-                structure._merged_nodes.add(get_node_id(a))
-                structure._merged_nodes.add(get_node_id(b))
-                structure._current_merge_nodes = []
-                if hasattr(structure, "end_highlight_phase"):
-                    structure.end_highlight_phase()
-            
-            # 若只剩 1 个，收尾；否则继续下一轮
-            if len(q) == 1:
-                structure.root = q[0]
-                structure._animation_state = "huffman_done"
-                structure._animation_progress = 1.0
-                self._update_snapshot()
-            else:
-                # 继续下一轮
-                structure._animation_state = None
-                structure._animation_progress = 0.0
-                # 直接串起下一轮
-                self._start_huffman_merge_iteration(structure)
+            structure.finish_phase()
+            self._update_snapshot()
+            if getattr(structure, "_animation_state", "") != "done":
+                self._start_huffman_phase(structure)
     
     def pause_huffman_animation(self):
         """暂停哈夫曼树动画"""
@@ -1510,17 +1374,17 @@ class MainController(QObject):
     
     def resume_huffman_animation(self):
         """恢复哈夫曼树动画"""
-        if hasattr(self, '_animation_timer') and self._animation_timer:
-            if not self._animation_timer.isActive():
-                self._animation_timer.start(100)  # 重新开始定时器
+        structure = self.structures.get("HuffmanTree")
+        if hasattr(self, '_animation_timer') and self._animation_timer and structure:
+            if getattr(structure, "_animation_state", "") != "done" and not self._animation_timer.isActive():
+                self._animation_timer.start(60)
                 self.hint_updated.emit("哈夫曼树动画已恢复")
     
     def step_huffman_animation(self):
-        """哈夫曼树动画单步执行"""
+        """哈夫曼树动画单步执行（推动当前阶段一次更新）"""
         structure = self.structures.get("HuffmanTree")
-        if structure and hasattr(structure, '_animation_state') and structure._animation_state == 'huffman_merging':
-            # 手动执行一步
-            self._update_huffman_animation(structure)
+        if structure and hasattr(structure, '_animation_state') and structure._animation_state not in ('done', None):
+            self._update_huffman_phase(structure)
     
     # ========== 工具方法 ==========
     
