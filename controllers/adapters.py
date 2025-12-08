@@ -2243,6 +2243,36 @@ class HuffmanTreeAdapter:
         walk(root)
     
     @staticmethod
+    def _collect_codes(node, prefix: str = "", out: Optional[Dict] = None):
+        """收集哈夫曼编码：返回 {叶节点对象: code}"""
+        if out is None:
+            out = {}
+        if not node:
+            return out
+        if getattr(node, "char", None) is not None:
+            out[node] = prefix or "0"
+            return out
+        HuffmanTreeAdapter._collect_codes(getattr(node, "left", None), prefix + "0", out)
+        HuffmanTreeAdapter._collect_codes(getattr(node, "right", None), prefix + "1", out)
+        return out
+    
+    @staticmethod
+    def _subtree_width(node, node_w=60, min_spacing=120):
+        """估算子树在队列视图中的水平占用宽度"""
+        if not node:
+            return 0
+        if not getattr(node, "left", None) and not getattr(node, "right", None):
+            return node_w
+        lw = HuffmanTreeAdapter._subtree_width(getattr(node, "left", None), node_w, min_spacing)
+        rw = HuffmanTreeAdapter._subtree_width(getattr(node, "right", None), node_w, min_spacing)
+        total = lw + rw
+        if getattr(node, "left", None) and getattr(node, "right", None):
+            total += min_spacing * 1.2
+        else:
+            total += min_spacing * 0.7
+        return max(node_w, total)
+    
+    @staticmethod
     def to_snapshot(huffman, start_x=120, queue_y=110, merge_cx=680, merge_cy=340, tree_cx=680, tree_y=520) -> StructureSnapshot:
         snapshot = StructureSnapshot()
 
@@ -2264,21 +2294,26 @@ class HuffmanTreeAdapter:
         else:
             snapshot.hint_text = "哈夫曼树"
 
-        # 合并区背景
-        merge_box = BoxSnapshot(
-            id="merge_area",
-            value="合并区",
-            x=merge_cx - 90,
-            y=merge_cy - 70,
-            width=180,
-            height=140,
-            color="#F1F5FB",
-            text_color="#1f4e79",
-        )
-        snapshot.boxes.append(merge_box)
+        def _queue_positions(nodes: List, canvas_w=1280, margin=60, base_gap=80, min_gap=40, node_w=60, min_spacing=120):
+            if not nodes:
+                return {}
+            usable = max(200, canvas_w - 2 * margin)
+            widths = [HuffmanTreeAdapter._subtree_width(n, node_w=node_w, min_spacing=min_spacing) for n in nodes]
+            sum_w = sum(widths)
+            gap = base_gap
+            if len(nodes) > 1:
+                gap = max(min_gap, min(base_gap, (usable - sum_w) / (len(nodes) - 1)))
+            total = sum_w + gap * (len(nodes) - 1)
+            start = margin + max(0, (usable - total) / 2)
+            pos = {}
+            cur = start
+            for n, w in zip(nodes, widths):
+                pos[n] = (cur + w / 2, queue_y)
+                cur += w + gap
+            return pos
 
-        pos_before = HuffmanTreeAdapter._queue_positions(queue_before, start_x, queue_y)
-        pos_after = HuffmanTreeAdapter._queue_positions(queue_after, start_x, queue_y)
+        pos_before = _queue_positions(queue_before)
+        pos_after = _queue_positions(queue_after)
 
         def draw_subtree(node, cx, cy, root_color, scale=1.0, level_h=90, node_w=60, spacing=120):
             """在队列位置绘制一棵子树（与初始节点等大）"""
@@ -2292,6 +2327,57 @@ class HuffmanTreeAdapter:
                 text_color = "#FFD700" if getattr(nd, "char", None) else "#FFFFFF"
                 HuffmanTreeAdapter._append_circle(snapshot, nid, getattr(nd, "freq", 0), label, nx, ny, color, scale=scale, text_color=text_color)
             HuffmanTreeAdapter._add_tree_edges_for_positions(node, mini_pos, snapshot)
+        
+        def draw_moving_subtree(node, cx, cy, root_color):
+            """移动阶段的子树绘制：整棵子树跟随根节点移动"""
+            if not node:
+                return
+            node_w = 60
+            min_spacing = 110
+            level_h = 85
+
+            def calc_width(n):
+                if not n:
+                    return 0
+                if not getattr(n, "left", None) and not getattr(n, "right", None):
+                    return node_w
+                lw = calc_width(getattr(n, "left", None))
+                rw = calc_width(getattr(n, "right", None))
+                total = lw + rw
+                if lw > 0 and rw > 0:
+                    total += min_spacing
+                return max(node_w, total)
+
+            def layout(n, center_x, y):
+                if not n:
+                    return {}
+                positions = {n: (center_x, y)}
+                if not getattr(n, "left", None) and not getattr(n, "right", None):
+                    return positions
+                lw = calc_width(getattr(n, "left", None))
+                rw = calc_width(getattr(n, "right", None))
+                if getattr(n, "left", None) and getattr(n, "right", None):
+                    total_child_width = lw + rw + min_spacing * 1.5
+                    left_center = center_x - total_child_width / 2 + lw / 2
+                    right_center = center_x + total_child_width / 2 - rw / 2
+                    positions.update(layout(getattr(n, "left", None), left_center, y + level_h))
+                    positions.update(layout(getattr(n, "right", None), right_center, y + level_h))
+                elif getattr(n, "left", None):
+                    left_center = center_x - min_spacing / 2
+                    positions.update(layout(getattr(n, "left", None), left_center, y + level_h))
+                elif getattr(n, "right", None):
+                    right_center = center_x + min_spacing / 2
+                    positions.update(layout(getattr(n, "right", None), right_center, y + level_h))
+                return positions
+
+            positions = layout(node, cx, cy)
+            for nd, (nx, ny) in positions.items():
+                nid = f"hf_{HuffmanTreeAdapter._node_id(nd)}"
+                label = getattr(nd, "char", None) or "*"
+                color = root_color if nd is node else HuffmanTreeAdapter.BASE_BLUE
+                text_color = "#FFD700" if getattr(nd, "char", None) else "#FFFFFF"
+                HuffmanTreeAdapter._append_circle(snapshot, nid, getattr(nd, "freq", 0), label, nx, ny, color, text_color=text_color)
+            HuffmanTreeAdapter._add_tree_edges_for_positions(node, positions, snapshot)
 
         def draw_queue(nodes, positions, faded_nodes=None):
             faded_nodes = faded_nodes or set()
@@ -2342,11 +2428,12 @@ class HuffmanTreeAdapter:
                 tx, ty = targets[min(idx, 1)]
                 cx = HuffmanTreeAdapter._lerp(sx, tx, progress)
                 cy = HuffmanTreeAdapter._lerp(sy, ty, progress)
-                nid = f"hf_{HuffmanTreeAdapter._node_id(n)}"
-                label = getattr(n, "char", None) or "*"
-                HuffmanTreeAdapter._append_circle(snapshot, nid, n.freq, label, cx, cy, HuffmanTreeAdapter.RED)
-            # 预留出的空位显示淡灰，强调移动
-            draw_queue(pair, pos_before, faded_nodes=set(pair))
+                if getattr(n, "left", None) or getattr(n, "right", None):
+                    draw_moving_subtree(n, cx, cy, HuffmanTreeAdapter.RED)
+                else:
+                    nid = f"hf_{HuffmanTreeAdapter._node_id(n)}"
+                    label = getattr(n, "char", None) or "*"
+                    HuffmanTreeAdapter._append_circle(snapshot, nid, n.freq, label, cx, cy, HuffmanTreeAdapter.RED)
             step_details.append("节点移动到合并区")
 
         elif state == "merge":
@@ -2354,8 +2441,11 @@ class HuffmanTreeAdapter:
             targets = [(merge_cx - 110, merge_cy), (merge_cx + 110, merge_cy)]
             for idx, n in enumerate(pair):
                 tx, ty = targets[min(idx, 1)]
-                label = getattr(n, "char", None) or "*"
-                HuffmanTreeAdapter._append_circle(snapshot, f"hf_{HuffmanTreeAdapter._node_id(n)}", n.freq, label, tx, ty, HuffmanTreeAdapter.RED)
+                if getattr(n, "left", None) or getattr(n, "right", None):
+                    draw_moving_subtree(n, tx, ty, HuffmanTreeAdapter.RED)
+                else:
+                    label = getattr(n, "char", None) or "*"
+                    HuffmanTreeAdapter._append_circle(snapshot, f"hf_{HuffmanTreeAdapter._node_id(n)}", n.freq, label, tx, ty, HuffmanTreeAdapter.RED)
             # 父节点淡入
             if len(pair) == 2:
                 parent_freq = pair[0].freq + pair[1].freq
@@ -2395,6 +2485,7 @@ class HuffmanTreeAdapter:
             # 展示最终树
             if huffman.root:
                 pos = HuffmanTreeAdapter._layout_tree(huffman.root, tree_cx, tree_y, level_h=100, node_w=60, min_spacing=120)
+                code_map = HuffmanTreeAdapter._collect_codes(huffman.root, "", {})
                 for n, (nx, ny) in pos.items():
                     nid = f"final_{id(n)}"
                     label = getattr(n, "char", None) or "*"
@@ -2402,6 +2493,72 @@ class HuffmanTreeAdapter:
                     text_color = "#FFD700" if getattr(n, "char", None) else "#FFFFFF"
                     HuffmanTreeAdapter._append_circle(snapshot, nid, n.freq, label, nx, ny, color, text_color=text_color)
                 HuffmanTreeAdapter._add_tree_edges(huffman.root, pos, snapshot)
+                
+                # 为边添加0/1标签，增强可视性
+                def add_edge_labels(node):
+                    if not node or node not in pos:
+                        return
+                    x, y = pos[node]
+                    if getattr(node, "left", None) and node.left in pos:
+                        lx, ly = pos[node.left]
+                        bx, by = (x + lx) / 2, (y + ly) / 2 - 6
+                        snapshot.boxes.append(BoxSnapshot(
+                            id=f"edge_label_0_{id(node.left)}",
+                            value="0",
+                            x=bx - 6,
+                            y=by - 8,
+                            width=0,
+                            height=0,
+                            color="#00000000",  # 透明背景，去掉方框感
+                            text_color="#0B1D40",  # 深色以模拟“加粗”效果
+                        ))
+                    if getattr(node, "right", None) and node.right in pos:
+                        rx, ry = pos[node.right]
+                        bx, by = (x + rx) / 2, (y + ry) / 2 - 6
+                        snapshot.boxes.append(BoxSnapshot(
+                            id=f"edge_label_1_{id(node.right)}",
+                            value="1",
+                            x=bx - 6,
+                            y=by - 8,
+                            width=0,
+                            height=0,
+                            color="#00000000",  # 透明背景
+                            text_color="#00474F",
+                        ))
+                    add_edge_labels(getattr(node, "left", None))
+                    add_edge_labels(getattr(node, "right", None))
+                
+                add_edge_labels(huffman.root)
+
+                # 叶子编码气泡：贴在叶子右侧展示编码
+                for leaf, code in code_map.items():
+                    if getattr(leaf, "char", None) is None:
+                        continue
+                    if leaf not in pos:
+                        continue
+                    lx, ly = pos[leaf]
+                    badge_w = max(70, len(str(code)) * 13 + 28)
+                    snapshot.boxes.append(BoxSnapshot(
+                        id=f"code_badge_{HuffmanTreeAdapter._node_id(leaf)}",
+                        value=f"{getattr(leaf, 'char', '*')}:{code}",
+                        x=lx + 40,
+                        y=ly - 18,
+                        width=badge_w,
+                        height=28,
+                        color="#FDF6E3",  # 柔和浅底
+                        text_color="#0B3C5D",
+                    ))
+
+                # 步骤详情列出编码表
+                char_codes = {
+                    getattr(node, "char", ""): code
+                    for node, code in code_map.items()
+                    if getattr(node, "char", None) is not None
+                }
+                if char_codes:
+                    step_details.append("叶子编码：")
+                    for ch, c in sorted(char_codes.items(), key=lambda x: x[0]):
+                        step_details.append(f"{ch}: {c}")
                 step_details.append("合并完成，得到最终哈夫曼树")
             else:
                 draw_queue(queue_live, HuffmanTreeAdapter._queue_positions(queue_live, start_x, queue_y))
