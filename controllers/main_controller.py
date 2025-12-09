@@ -89,6 +89,8 @@ class MainController(QObject):
         self.action_executor = ActionExecutor(self)
         self.llm_context_actions: List[Dict[str, Any]] = []  # 供LLM参考的已有操作上下文
         self._animation_timer: Optional[QTimer] = None
+        self._animation_paused: bool = False
+        self._paused_elapsed: float = 0.0  # 毫秒
         self.current_llm_model: Optional[str] = self.llm_service.default_model
         
         self._update_snapshot()
@@ -193,8 +195,43 @@ class MainController(QObject):
                 self._animation_timer.timeout.disconnect()
             except TypeError:
                 pass
+        # 重置暂停状态
+        self._animation_paused = False
+        self._paused_elapsed = 0.0
         self._animation_timer.timeout.connect(callback)
         self._animation_timer.start(interval)
+    
+    def pause_current_animation(self):
+        """通用暂停：哈夫曼走专用逻辑，其它结构暂停统一定时器"""
+        if self.current_structure_key == "HuffmanTree":
+            self.pause_huffman_animation()
+            return
+        timer = getattr(self, "_animation_timer", None)
+        if timer and timer.isActive():
+            import time
+            now = time.time() * 1000.0
+            if self._animation_start_time:
+                self._paused_elapsed = now - self._animation_start_time
+            else:
+                self._paused_elapsed = 0.0
+            self._animation_paused = True
+            timer.stop()
+            self.hint_updated.emit("动画已暂停")
+    
+    def resume_current_animation(self):
+        """通用继续播放：哈夫曼走专用逻辑，其它结构恢复统一定时器"""
+        if self.current_structure_key == "HuffmanTree":
+            self.resume_huffman_animation()
+            return
+        timer = getattr(self, "_animation_timer", None)
+        if timer and not timer.isActive():
+            import time
+            now = time.time() * 1000.0
+            self._animation_start_time = now - (self._paused_elapsed or 0.0)
+            self._animation_paused = False
+            self._paused_elapsed = 0.0
+            timer.start(timer.interval())
+            self.hint_updated.emit("动画已恢复")
     
     # ========== 顺序表操作 ==========
     
@@ -295,6 +332,8 @@ class MainController(QObject):
         # 如果动画完成，停止定时器并完成操作
         if progress >= 1.0:
             self._animation_timer.stop()
+            self._animation_paused = False
+            self._paused_elapsed = 0.0
             # 根据动画状态完成相应操作
             if structure._animation_state == 'inserting':
                 structure.complete_insert_animation()
@@ -467,6 +506,8 @@ class MainController(QObject):
         # 如果动画完成，停止定时器并完成操作
         if progress >= 1.0:
             self._animation_timer.stop()
+            self._animation_paused = False
+            self._paused_elapsed = 0.0
             if structure._animation_state == 'pushing':
                 structure.complete_push_animation()
             elif structure._animation_state == 'popping':
@@ -802,6 +843,8 @@ class MainController(QObject):
         # 如果动画完成，停止定时器并完成操作
         if progress >= 1.0:
             self._animation_timer.stop()
+            self._animation_paused = False
+            self._paused_elapsed = 0.0
             if structure._animation_state == 'building':
                 structure.complete_build_animation()
             self._update_snapshot()
@@ -1360,6 +1403,8 @@ class MainController(QObject):
         
         if progress >= 1.0:
             self._animation_timer.stop()
+            self._animation_paused = False
+            self._paused_elapsed = 0.0
             structure.finish_phase()
             self._update_snapshot()
             if getattr(structure, "_animation_state", "") != "done":
@@ -1369,6 +1414,13 @@ class MainController(QObject):
         """暂停哈夫曼树动画"""
         if hasattr(self, '_animation_timer') and self._animation_timer:
             if self._animation_timer.isActive():
+                import time
+                now = time.time() * 1000.0
+                if self._animation_start_time:
+                    self._paused_elapsed = now - self._animation_start_time
+                else:
+                    self._paused_elapsed = 0.0
+                self._animation_paused = True
                 self._animation_timer.stop()
                 self.hint_updated.emit("哈夫曼树动画已暂停")
     
@@ -1377,7 +1429,11 @@ class MainController(QObject):
         structure = self.structures.get("HuffmanTree")
         if hasattr(self, '_animation_timer') and self._animation_timer and structure:
             if getattr(structure, "_animation_state", "") != "done" and not self._animation_timer.isActive():
-                self._animation_timer.start(60)
+                import time
+                now = time.time() * 1000.0
+                self._animation_start_time = now - (self._paused_elapsed or 0.0)
+                self._animation_paused = False
+                self._animation_timer.start(self._animation_timer.interval())
                 self.hint_updated.emit("哈夫曼树动画已恢复")
     
     def step_huffman_animation(self):
@@ -1448,6 +1504,8 @@ class MainController(QObject):
         # 如果动画完成，停止定时器并完成操作
         if progress >= 1.0:
             self._animation_timer.stop()
+            self._animation_paused = False
+            self._paused_elapsed = 0.0
             if structure._animation_state == 'building':
                 structure.complete_build_animation()
             elif structure._animation_state == 'inserting':

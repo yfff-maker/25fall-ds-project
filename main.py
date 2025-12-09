@@ -113,6 +113,7 @@ class MainWindow(QMainWindow):
             self._chat_pending_text = None
             self._dsl_executing = False
             self.btn_execute_dsl = None
+            self._suppress_finish_dialog = False  # 暂停后抑制“执行完成/成功”弹窗
             
             # 连接控制器信号
             self.controller.snapshot_updated.connect(self.canvas.render_snapshot)
@@ -726,21 +727,19 @@ class MainWindow(QMainWindow):
     
     def _handle_play_clicked(self):
         """处理播放按钮点击"""
-        if self.controller.current_structure_key == "HuffmanTree":
-            # 哈夫曼树动画控制
-            self.controller.resume_huffman_animation()
-        else:
-            # 其他数据结构的动画控制
-            self.canvas.animator_play()
+        # 恢复时允许再次显示完成弹窗
+        self._suppress_finish_dialog = False
+        # 统一交由控制器处理动画继续；保留旧animator以兼容历史动画
+        self.controller.resume_current_animation()
+        self.canvas.animator_play()
     
     def _handle_pause_clicked(self):
         """处理暂停按钮点击"""
-        if self.controller.current_structure_key == "HuffmanTree":
-            # 哈夫曼树动画控制
-            self.controller.pause_huffman_animation()
-        else:
-            # 其他数据结构的动画控制
-            self.canvas.animator_pause()
+        # 暂停后抑制“执行完成/成功”类弹窗
+        self._suppress_finish_dialog = True
+        # 统一交由控制器处理动画暂停；保留旧animator以兼容历史动画
+        self.controller.pause_current_animation()
+        self.canvas.animator_pause()
     
     def _handle_step_clicked(self):
         """处理单步按钮点击"""
@@ -823,7 +822,10 @@ class MainWindow(QMainWindow):
             error_details = "\n".join([msg for msg in messages if msg.startswith("✗")]) or "\n".join(messages)
             QMessageBox.warning(self, "执行结果", f"{result_msg}\n\n失败的命令:\n{error_details}")
         else:
-            QMessageBox.information(self, "执行成功", result_msg)
+            if not self._suppress_finish_dialog:
+                QMessageBox.information(self, "执行成功", result_msg)
+            # 若已暂停导致抑制弹窗，仍重置标记，避免影响后续操作
+        self._suppress_finish_dialog = False
     
     def _action_natural_language(self):
         """打开自然语言操作对话框"""

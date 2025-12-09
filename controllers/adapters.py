@@ -3,6 +3,7 @@
 数据适配器：将数据结构状态转换为可视化快照
 """
 import copy
+import math
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 
@@ -76,6 +77,20 @@ class StructureSnapshot:
             self.step_details = []
         if self.operation_history is None:
             self.operation_history = []
+
+
+def _fmt_int(value) -> str:
+    """
+    将可数字化的值格式化为整数形式的字符串，避免显示小数点。
+    非数值则按原始字符串返回。
+    """
+    try:
+        v = float(value)
+        if not math.isfinite(v):
+            raise ValueError
+        return str(int(round(v)))
+    except Exception:
+        return str(value)
 
 
 def center_snapshot(snapshot: StructureSnapshot,
@@ -1525,7 +1540,7 @@ class BSTAdapter:
     def _circle_snapshot(node_id, value, center_x, center_y, color, text_color="#FFFFFF"):
         return NodeSnapshot(
             id=node_id,
-            value=value,
+            value=_fmt_int(value),
             x=center_x,
             y=center_y,
             node_type="circle",
@@ -1944,7 +1959,7 @@ class BSTAdapter:
                     # 创建动画中的新节点
                     node_snapshot = NodeSnapshot(
                         id="animating_insert",
-                        value=str(new_value),
+                        value=_fmt_int(new_value),
                         x=current_x,
                         y=current_y,
                         node_type="circle",
@@ -2111,7 +2126,7 @@ class HuffmanTreeAdapter:
         diameter = max(28, int(64 * scale))
         ns = NodeSnapshot(
             id=node_id,
-            value=str(freq),
+            value=_fmt_int(freq),
             x=x,
             y=y,
             node_type="circle",
@@ -2539,7 +2554,7 @@ class HuffmanTreeAdapter:
                     badge_w = max(70, len(str(code)) * 13 + 28)
                     snapshot.boxes.append(BoxSnapshot(
                         id=f"code_badge_{HuffmanTreeAdapter._node_id(leaf)}",
-                        value=f"{getattr(leaf, 'char', '*')}:{code}",
+                        value=str(code),  # 只显示二进制编码
                         x=lx + 40,
                         y=ly - 18,
                         width=badge_w,
@@ -2577,7 +2592,7 @@ class AVLAdapter:
     def _circle_snapshot(node_id, value, center_x, center_y, color, text_color="#FFFFFF"):
         return NodeSnapshot(
             id=node_id,
-            value=value,
+            value=_fmt_int(value),
             x=center_x,
             y=center_y,
             node_type="circle",
