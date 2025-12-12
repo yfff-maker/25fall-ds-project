@@ -15,10 +15,22 @@ class StackModel(BaseStructure):
             self._capacity = capacity
             self._data = [None] * capacity  # 固定大小数组
             self._top = -1  # 栈顶索引，-1表示空栈
+
+        def _ensure_capacity(self, min_capacity):
+            """确保容量至少为 min_capacity，不够则扩容为两倍或所需值"""
+            if min_capacity <= self._capacity:
+                return
+            new_capacity = max(min_capacity, self._capacity * 2)
+            new_data = [None] * new_capacity
+            for i in range(self._top + 1):
+                new_data[i] = self._data[i]
+            self._data = new_data
+            self._capacity = new_capacity
         
         def push(self, v):
             if self.is_full():
-                return False
+                # 自动扩容后再插入
+                self._ensure_capacity(self._capacity + 1)
             self._top += 1
             self._data[self._top] = v
             return True
@@ -150,16 +162,10 @@ class StackModel(BaseStructure):
         if not self.active:
             return
         
-        # 检查输入元素数量是否超过栈容量
         values_list = list(values)
-        if len(values_list) > self.data._capacity:
-            # 设置栈满状态，不执行构建操作
-            self._animation_state = 'stack_full'
-            self._animation_progress = 0.0
-            return
         
         # 清空当前栈
-        self.data = self.SequentialStack()
+        self.data = self.SequentialStack(max(len(values_list), self.data._capacity))
         self._animation_state = None
         self._new_value = None
         
