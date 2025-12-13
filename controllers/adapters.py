@@ -211,9 +211,10 @@ class SequentialListAdapter:
         insert_position = getattr(sequential_list, '_insert_position', 0) if animation_state == 'inserting' else -1
         delete_position = getattr(sequential_list, '_delete_position', 0) if animation_state == 'deleting' else -1
         
-        # 自动换行布局参数
+        # 自动换行布局参数（水平间距保持不变；通过 row_gap 增大行距）
         canvas_width = 1200  # 画布宽度
         elements_per_row = max(1, canvas_width // box_width)  # 每行最多元素数量
+        row_gap = 60  # 行间距（仅影响垂直方向，提升清晰度）
         
         # 动态绘制元素（只绘制实际存在的元素）
         for i in range(list_size):
@@ -222,7 +223,7 @@ class SequentialListAdapter:
             col = i % elements_per_row
             
             element_x = array_start_x + col * box_width
-            element_y = array_start_y + row * (box_height + 30)  # 行间距30像素
+            element_y = array_start_y + row * (box_height + row_gap)
             
             # 确定方框的值和颜色
             value = str(list_data[i])  # 顺序表按索引顺序显示
@@ -247,7 +248,9 @@ class SequentialListAdapter:
                 y=element_y,
                 width=box_width,
                 height=box_height,
-                color=color
+                color=color,
+                # 元素值（非下标）统一白字，提高对比度
+                text_color="#FFFFFF"
             )
             snapshot.boxes.append(box)
         
@@ -257,7 +260,7 @@ class SequentialListAdapter:
             col = i % elements_per_row
             
             element_x = array_start_x + col * box_width
-            element_y = array_start_y + row * (box_height + 30)
+            element_y = array_start_y + row * (box_height + row_gap)
             
             index_label = BoxSnapshot(
                 id=f"index_{i}",
@@ -266,7 +269,8 @@ class SequentialListAdapter:
                 y=element_y + box_height + 5,
                 width=box_width,
                 height=20,
-                color="#F0F0F0"
+                color="#F0F0F0",
+                text_color="#111827"
             )
             snapshot.boxes.append(index_label)
         
@@ -278,7 +282,7 @@ class SequentialListAdapter:
             last_col = last_element_index % elements_per_row
             
             last_element_x = array_start_x + last_col * box_width
-            last_element_y = array_start_y + last_row * (box_height + 30)
+            last_element_y = array_start_y + last_row * (box_height + row_gap)
             
             # 高亮当前最后一个元素位置
             length_box = BoxSnapshot(
@@ -324,7 +328,8 @@ class SequentialListAdapter:
                     y=current_y,
                     width=box_width,
                     height=box_height,
-                    color="#FF6B6B"  # 红色表示正在移动的节点
+                    color="#FF6B6B",  # 红色表示正在移动的节点
+                    text_color="#FFFFFF"
                 )
                 snapshot.boxes.append(new_node)
                 
@@ -355,7 +360,8 @@ class SequentialListAdapter:
                             y=shifted_y,
                             width=box_width,
                             height=box_height,
-                            color="#FFA500"  # 橙色表示正在后移的元素
+                            color="#FFA500",  # 橙色表示正在后移的元素
+                            text_color="#FFFFFF"
                         )
                         snapshot.boxes.append(shifted_box)
                         
@@ -409,7 +415,8 @@ class SequentialListAdapter:
                         y=delete_y,
                         width=box_width,
                         height=box_height,
-                        color="#FF0000"  # 红色表示被删除的元素
+                    color="#FF0000",  # 红色表示被删除的元素
+                    text_color="#FFFFFF"
                     )
                     snapshot.boxes.append(delete_box)
                 
@@ -441,7 +448,8 @@ class SequentialListAdapter:
                             y=shifted_y,
                             width=box_width,
                             height=box_height,
-                            color="#FFA500"  # 橙色表示正在前移的元素
+                            color="#FFA500",  # 橙色表示正在前移的元素
+                            text_color="#FFFFFF"
                         )
                         snapshot.boxes.append(shifted_box)
                         

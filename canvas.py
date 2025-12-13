@@ -218,7 +218,10 @@ class Canvas(QObject):
         # 使用text_color参数，如果没有则使用默认颜色
         text_color = getattr(box, 'text_color', '#000000')
         label.setDefaultTextColor(QColor(text_color))
+        # 下标（index_）字号更小：约为原来的 1/2；其它保持不变
         font = QFont("Segoe UI", 11)
+        if getattr(box, "id", "").startswith("index_"):
+            font.setPointSize(6)
         font.setWeight(QFont.Medium)
         label.setFont(font)
         # 居中显示文本
