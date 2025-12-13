@@ -2,10 +2,11 @@
 from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsEllipseItem, QGraphicsTextItem, QGraphicsLineItem, QGraphicsRectItem
 from PyQt5.QtGui import QBrush, QPen, QColor, QFont, QPainter
 from PyQt5.QtCore import Qt, QPointF, QTimer, QObject
+from controllers.adapters import center_snapshot
 
 NODE_RADIUS = 22
-BOX_NODE_WIDTH = 60
-BOX_NODE_HEIGHT = 40
+BOX_NODE_WIDTH = 72
+BOX_NODE_HEIGHT = 48
 DEFAULT_NODE_COLOR = QColor("#4C78A8")
 DEFAULT_TEXT_COLOR = Qt.white
 
@@ -58,6 +59,8 @@ class Canvas(QObject):
         super().__init__(parent)
         self.scene = QGraphicsScene()
         self.view = QGraphicsView(self.scene)
+        # 避免 scene 小于视口时被自动居中导致“上方留白”
+        self.view.setAlignment(Qt.AlignLeft | Qt.AlignTop)
         self.view.setRenderHint(QPainter.Antialiasing, True)
         self.view.setRenderHint(QPainter.TextAntialiasing, True)
         self.view.setRenderHint(QPainter.SmoothPixmapTransform, True)
@@ -79,7 +82,7 @@ class Canvas(QObject):
         hint_font.setWeight(QFont.DemiBold)
         self.hint_label.setFont(hint_font)
         self.hint_label.setDefaultTextColor(QColor("#4B5563"))
-        self.hint_label.setPos(14, 14)
+        self.hint_label.setPos(14, 14)  # 左上角显示当前数据结构/提示
         self.scene.addItem(self.hint_label)
         
         # 比较信息标签（右下角）
@@ -119,51 +122,57 @@ class Canvas(QObject):
     def animator_speed(self, v: int): self.animator.set_speed(v)
 
     def set_hint(self, text: str):
-        self.hint_label.setPlainText(text)
+        self.hint_label.setPlainText(text or "")
     
     def set_comparison_info(self, text: str):
-        """设置比较信息（右下角显示）"""
-        self.comparison_label.setPlainText(text)
-        # 计算右下角位置
-        if text:
-            rect = self.comparison_label.boundingRect()
-            x = self.view.width() - rect.width() - 20
-            y = self.view.height() - rect.height() - 20
-            self.comparison_label.setPos(x, y)
-        else:
-            self.comparison_label.setPos(0, 0)
+        """设置比较信息"""
+        self.comparison_label.setPlainText(text or "")
     
     def set_step_details(self, details: list):
-        """设置步骤说明（右下角显示）"""
-        if details:
-            # 将步骤说明列表转换为多行文本
-            text = "\n".join(details)
-            self.step_details_label.setPlainText(text)
-            # 计算右下角位置
-            rect = self.step_details_label.boundingRect()
-            x = self.view.width() - rect.width() - 20
-            y = self.view.height() - rect.height() - 20
-            self.step_details_label.setPos(x, y)
-        else:
-            self.step_details_label.setPlainText("")
-            self.step_details_label.setPos(0, 0)
+        """设置步骤说明"""
+        text = "\n".join(details) if details else ""
+        self.step_details_label.setPlainText(text)
     
     def set_operation_history(self, history: list):
-        """设置操作历史记录（左侧显示）"""
-        if history:
-            # 将操作历史列表转换为多行文本
-            text = "\n".join(history)
-            self.operation_history_label.setPlainText(text)
-            # 设置左侧位置
-            self.operation_history_label.setPos(10, 60)  # 在提示文本下方
+        """设置操作历史记录"""
+        text = "\n".join(history) if history else ""
+        self.operation_history_label.setPlainText(text)
+
+    def _layout_labels(self):
+        """布局说明类文字：结构提示左上；步骤说明/比较信息/操作历史依次贴右上"""
+        margin_x = 18
+        margin_y = 16
+        w = self.view.viewport().width() or self.view.width() or 1280
+        h = self.view.viewport().height() or self.view.height() or 720
+
+        # 左上：hint（当前数据结构/提示）
+        if self.hint_label.toPlainText():
+            self.hint_label.setPos(margin_x, margin_y)
         else:
-            self.operation_history_label.setPlainText("")
-            self.operation_history_label.setPos(0, 0)
+            self.hint_label.setPos(margin_x, margin_y)
+
+        # 右上：步骤说明 -> 比较信息 -> 操作历史，依次向下堆叠
+        x_right = w - margin_x
+        y_cur = margin_y
+        for item in (self.step_details_label, self.comparison_label, self.operation_history_label):
+            txt = item.toPlainText()
+            if not txt:
+                continue
+            rect = item.boundingRect()
+            item.setPos(x_right - rect.width(), y_cur)
+            y_cur += rect.height() + 10
 
     def render_snapshot(self, snapshot):
         """根据快照渲染数据结构"""
         if not snapshot:
             return
+
+        # 按真实视口尺寸居中，并整体上移一点
+        canvas_w = self.view.viewport().width() or self.view.width() or 1280
+        canvas_h = self.view.viewport().height() or self.view.height() or 720
+        # 固定 sceneRect 到视口大小，避免 Qt 自动居中 scene 造成额外留白
+        self.scene.setSceneRect(0, 0, canvas_w, canvas_h)
+        snapshot = center_snapshot(snapshot, canvas_w, canvas_h, margin=40, bias_y=-160)
         
         # 清除现有内容
         self.clear_scene()
@@ -189,6 +198,9 @@ class Canvas(QObject):
             self.set_operation_history(snapshot.operation_history)
         else:
             self.set_operation_history([])
+
+        # 说明文字按需求布局：结构提示左上；步骤/比较/历史依次占据右上
+        self._layout_labels()
         
         # 渲染方框（用于数组等）
         for box in snapshot.boxes:
@@ -226,8 +238,11 @@ class Canvas(QObject):
         label.setDefaultTextColor(QColor(text_color))
         # 下标（index_）字号更小：约为原来的 1/2；其它保持不变
         font = QFont("Segoe UI", 11)
-        if getattr(box, "id", "").startswith("index_"):
+        box_id = getattr(box, "id", "")
+        if box_id.startswith("index_"):
             font.setPointSize(6)
+        elif box_id.startswith("balance_"):
+            font.setPointSize(9)
         font.setWeight(QFont.Medium)
         label.setFont(font)
         # 居中显示文本
@@ -337,7 +352,7 @@ class Canvas(QObject):
         # 简化实现，假设边包含坐标信息
         if hasattr(edge, 'from_x') and hasattr(edge, 'from_y') and hasattr(edge, 'to_x') and hasattr(edge, 'to_y'):
             line = QGraphicsLineItem(edge.from_x, edge.from_y, edge.to_x, edge.to_y)
-            line.setPen(QPen(QColor(edge.color), 2))
+            line.setPen(QPen(QColor(edge.color), 3))
             self.scene.addItem(line)
 
     def clear_scene(self):
@@ -405,7 +420,7 @@ class Canvas(QObject):
 
     def add_arrow(self, p1: QPointF, p2: QPointF, color=Qt.black):
         line = QGraphicsLineItem(p1.x(), p1.y(), p2.x(), p2.y())
-        line.setPen(QPen(QColor(color), 2))
+        line.setPen(QPen(QColor(color), 3))
         self.scene.addItem(line)
         return line
 

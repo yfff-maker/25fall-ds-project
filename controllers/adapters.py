@@ -96,9 +96,12 @@ def _fmt_int(value) -> str:
 def center_snapshot(snapshot: StructureSnapshot,
                     canvas_width: float = 1280,
                     canvas_height: float = 720,
-                    margin: float = 40) -> StructureSnapshot:
+                    margin: float = 40,
+                    bias_x: float = 0.0,
+                    bias_y: float = 0.0) -> StructureSnapshot:
     """
     调整快照内所有元素的位置，使其在指定画布范围内居中显示。
+    bias_x / bias_y 用于整体偏移（负值上移/左移）。
     仅修改传入的 snapshot 并返回引用，方便链式调用。
     """
     if snapshot is None:
@@ -122,13 +125,11 @@ def center_snapshot(snapshot: StructureSnapshot,
         _include_rect(x, y, 0, 0)
 
     # 记录节点和方框的范围
+    # 约定：NodeSnapshot 的 x,y 为节点中心坐标（无论 circle 还是 box）；BoxSnapshot 的 x,y 为左上角
     for node in snapshot.nodes:
-        width = node.width if node.width is not None else (60 if node.node_type == "box" else 40)
-        height = node.height if node.height is not None else (40 if node.node_type == "box" else 40)
-        if node.node_type == "circle":
-            _include_rect(node.x - width / 2, node.y - height / 2, width, height)
-        else:
-            _include_rect(node.x, node.y, width, height)
+        width = node.width if node.width is not None else 40
+        height = node.height if node.height is not None else 40
+        _include_rect(node.x - width / 2, node.y - height / 2, width, height)
 
     for box in snapshot.boxes:
         _include_rect(box.x, box.y, box.width, box.height)
@@ -147,8 +148,8 @@ def center_snapshot(snapshot: StructureSnapshot,
     if content_width == 0 and content_height == 0:
         return snapshot
 
-    canvas_center_x = canvas_width / 2.0
-    canvas_center_y = canvas_height / 2.0
+    canvas_center_x = canvas_width / 2.0 + bias_x
+    canvas_center_y = canvas_height / 2.0 + bias_y
     content_center_x = min_x + content_width / 2.0
     content_center_y = min_y + content_height / 2.0
 
@@ -1013,7 +1014,7 @@ class StackAdapter:
     """栈适配器"""
     
     @staticmethod
-    def to_snapshot(stack, start_x=100, y=200, box_width=60, box_height=40) -> StructureSnapshot:
+    def to_snapshot(stack, start_x=100, y=200, box_width=88, box_height=60) -> StructureSnapshot:
         """将栈转换为快照"""
         snapshot = StructureSnapshot()
         stack_size = stack.size()
@@ -1055,7 +1056,8 @@ class StackAdapter:
                     y=stack_start_y + stack_position * (box_height + 2),
                     width=box_width,
                     height=box_height,
-                    color="#4C78A8"  # 蓝色
+                    color="#4C78A8",  # 蓝色
+                    text_color="#FFFFFF"
                 )
                 snapshot.boxes.append(stack_box)
         
@@ -1070,10 +1072,10 @@ class StackAdapter:
         bottom_box = BoxSnapshot(
             id="bottom_indicator",
             value="栈底",
-            x=stack_start_x - 20,
+            x=stack_start_x - 30,
             y=bottom_y,
-            width=box_width + 40,
-            height=25,
+            width=box_width + 70,
+            height=32,
             color="#90EE90"  # 绿色
         )
         snapshot.boxes.append(bottom_box)
@@ -1085,7 +1087,7 @@ class StackAdapter:
             # 栈顶元素的位置是 stack_start_y + 0 * (box_height + 2)
             top_y = stack_start_y + box_height // 2
         else:
-            # 栈空时，top指向栈底
+            # 栈空时，将 top 水平放在“栈底”右侧并与其对齐
             top_y = bottom_y
         
         # 如果在入栈动画中，top指针在新元素到达栈顶之前待在原来的栈顶
@@ -1115,10 +1117,11 @@ class StackAdapter:
         top_box = BoxSnapshot(
             id="top_indicator",
             value="top",
-            x=stack_start_x + box_width + 10,
+            # 加大右侧间距，避免与“栈底”指示框重叠，同时给文字留足空间
+            x=(stack_start_x - 30 + (box_width + 70) + 12) if stack_size == 0 else stack_start_x + box_width + 40,
             y=top_y,
             width=box_width,
-            height=25,
+            height=32,
             color="#FF6B6B"  # 红色
         )
         snapshot.boxes.append(top_box)
@@ -1142,7 +1145,8 @@ class StackAdapter:
                         y=stack_start_y + stack_position * (box_height + 2),
                         width=box_width,
                         height=box_height,
-                        color="#4C78A8"  # 蓝色
+                        color="#4C78A8",  # 蓝色
+                        text_color="#FFFFFF"
                     )
                     snapshot.boxes.append(stack_box)
             
@@ -1235,15 +1239,16 @@ class StackAdapter:
         
         # 添加状态提示
         if stack_size == 0:
-            # 栈空提示
+            # 栈空提示：改为透明背景的文字，放在“栈底”右侧
             empty_indicator = BoxSnapshot(
                 id="stack_empty_indicator",
                 value="栈空！",
-                x=stack_start_x - 50,
-                y=stack_start_y - 30,
-                width=box_width + 100,
-                height=25,
-                color="#90EE90"  # 绿色
+                x=stack_start_x - 30 + (box_width + 70) + 14,
+                y=bottom_y,
+                width=0,
+                height=0,
+                color="#00000000",
+                text_color="#4B5563"
             )
             snapshot.boxes.append(empty_indicator)
         
@@ -1253,7 +1258,7 @@ class BinaryTreeAdapter:
     """改进的二叉树适配器 - 使用递归子树宽度计算"""
     
     @staticmethod
-    def _calculate_subtree_width(node, node_width=60, min_spacing=100):
+    def _calculate_subtree_width(node, node_width=72, min_spacing=120):
         """递归计算子树所需的最小宽度"""
         if not node:
             return 0
@@ -1276,7 +1281,7 @@ class BinaryTreeAdapter:
         return max(node_width, subtree_total_width)
     
     @staticmethod
-    def _layout_tree(node, center_x, y, level_height=80, node_width=60, min_spacing=100):
+    def _layout_tree(node, center_x, y, level_height=90, node_width=72, min_spacing=120):
         """递归布局二叉树，确保子树不重叠"""
         if not node:
             return {}
@@ -1336,8 +1341,11 @@ class BinaryTreeAdapter:
         
         node_x, node_y = positions[node]
         node_id = f"node_{id(node)}"
-        radius = AVLAdapter.NODE_RADIUS
-        radius = BSTAdapter.NODE_RADIUS
+        # 链式二叉树节点尺寸（与节点快照一致）
+        node_w = 72
+        node_h = 48
+        half_w = node_w / 2
+        half_h = node_h / 2
         
         # 添加到左子节点的边
         if node.left:
@@ -1350,11 +1358,12 @@ class BinaryTreeAdapter:
                 color="#2E86AB",
                 arrow_type="line"
             )
-            # 设置连线坐标 - 从红色左指针方框出发，连接到子节点中心
-            edge.from_x = node_x - 60  # 左指针方框位置
-            edge.from_y = node_y - 30  # 左指针方框位置（稍微偏下）
-            edge.to_x = left_x- 40  # 子节点中心x坐标
-            edge.to_y = left_y - 10  # 子节点中心y坐标（稍微偏上）
+            # 起点：左指针红色方框中心（在主矩形左侧）
+            edge.from_x = node_x - half_w
+            edge.from_y = node_y
+            # 终点：子节点主矩形顶部中心
+            edge.to_x = left_x
+            edge.to_y = left_y - half_h
             
             snapshot.edges.append(edge)
             
@@ -1372,11 +1381,12 @@ class BinaryTreeAdapter:
                 color="#2E86AB",
                 arrow_type="line"
             )
-            # 设置连线坐标 - 从绿色右指针方框出发，连接到子节点中心
-            edge.from_x = node_x   # 右指针方框位置
-            edge.from_y = node_y - 30  # 右指针方框位置
-            edge.to_x = right_x-40  # 子节点中心x坐标
-            edge.to_y = right_y -10  # 子节点中心y坐标（稍微偏下）
+            # 起点：右指针绿色方框中心（在主矩形右侧）
+            edge.from_x = node_x + half_w
+            edge.from_y = node_y
+            # 终点：子节点主矩形顶部中心
+            edge.to_x = right_x
+            edge.to_y = right_y - half_h
             
             snapshot.edges.append(edge)
             
@@ -1384,7 +1394,7 @@ class BinaryTreeAdapter:
             BinaryTreeAdapter._add_edges(node.right, positions, snapshot)
     
     @staticmethod
-    def to_snapshot(binary_tree, start_x=640, y=200, level_height=80, node_width=60, min_spacing=100) -> StructureSnapshot:
+    def to_snapshot(binary_tree, start_x=640, y=200, level_height=110, node_width=72, min_spacing=130) -> StructureSnapshot:
         """将二叉树转换为快照 - 使用改进的布局算法"""
         snapshot = StructureSnapshot()
         snapshot.hint_text = f"二叉树 (节点数: {len(binary_tree.get_all_node_values())})"
@@ -1422,11 +1432,11 @@ class BinaryTreeAdapter:
                 node_snapshot = NodeSnapshot(
                     id=node_id,
                     value=str(node.value),
-                    x=x - 30,  # 节点中心对齐
-                    y=y_pos - 20,
+                    x=x,          # 以布局中心为节点中心
+                    y=y_pos,
                     node_type="box",
-                    width=60,
-                    height=40,
+                    width=72,
+                    height=48,
                     color="#1f4e79"  # 深蓝色
                 )
             
@@ -1443,7 +1453,7 @@ class BinaryTreeAdapter:
             value="root",
             x=root_pointer_x,
             y=root_pointer_y,
-            width=60,
+            width=72,
             height=30,
             color="#FFD700"  # 金色
         )
@@ -1482,11 +1492,11 @@ class BinaryTreeAdapter:
                 node_snapshot = NodeSnapshot(
                     id="animating_root",
                     value=str(new_value),
-                    x=current_x - 30,
-                    y=current_y - 20,
+                    x=current_x - 36,
+                    y=current_y - 24,
                     node_type="box",
-                    width=60,
-                    height=40,
+                    width=72,
+                    height=48,
                     color="#FF6B6B"  # 红色表示正在移动
                 )
                 snapshot.nodes.append(node_snapshot)
@@ -1523,11 +1533,11 @@ class BinaryTreeAdapter:
                     node_snapshot = NodeSnapshot(
                         id="animating_insert",
                         value=str(new_value),
-                        x=current_x - 30,
-                        y=current_y - 20,
+                        x=current_x - 36,
+                        y=current_y - 24,
                         node_type="box",
-                        width=60,
-                        height=40,
+                        width=72,
+                        height=48,
                         color="#FF6B6B"  # 红色表示正在移动
                     )
                     snapshot.nodes.append(node_snapshot)
@@ -1537,7 +1547,7 @@ class BinaryTreeAdapter:
 
 class BSTAdapter:
     """二叉搜索树适配器 - 使用与链式二叉树相同的布局算法"""
-    NODE_DIAMETER = 60
+    NODE_DIAMETER = 72
     NODE_RADIUS = NODE_DIAMETER / 2
     
     @staticmethod
@@ -1555,7 +1565,7 @@ class BSTAdapter:
         )
     
     @staticmethod
-    def _calculate_subtree_width(node, node_width=60, min_spacing=100):
+    def _calculate_subtree_width(node, node_width=72, min_spacing=120):
         """递归计算子树所需的最小宽度"""
         if not node:
             return 0
@@ -1578,7 +1588,7 @@ class BSTAdapter:
         return max(node_width, subtree_total_width)
     
     @staticmethod
-    def _layout_tree(node, center_x, y, level_height=80, node_width=60, min_spacing=100):
+    def _layout_tree(node, center_x, y, level_height=90, node_width=72, min_spacing=120):
         """递归布局二叉树，确保子树不重叠"""
         if not node:
             return {}
@@ -1682,7 +1692,7 @@ class BSTAdapter:
             BSTAdapter._add_edges(node.right, positions, snapshot)
     
     @staticmethod
-    def to_snapshot(bst, start_x=640, y=200, level_height=120, node_width=60, min_spacing=100) -> StructureSnapshot:
+    def to_snapshot(bst, start_x=640, y=200, level_height=130, node_width=72, min_spacing=120) -> StructureSnapshot:
         """将BST转换为快照 - 使用与链式二叉树相同的布局算法"""
         snapshot = StructureSnapshot()
         snapshot.hint_text = f"二叉搜索树 (节点数: {len(bst.traverse_inorder())})"
@@ -2127,7 +2137,7 @@ class HuffmanTreeAdapter:
     @staticmethod
     def _append_circle(snapshot: StructureSnapshot, node_id: str, freq, label: str, x: float, y: float,
                        color: str, scale: float = 1.0, text_color: str = "#FFFFFF") -> NodeSnapshot:
-        diameter = max(28, int(64 * scale))
+        diameter = max(32, int(72 * scale))
         ns = NodeSnapshot(
             id=node_id,
             value=_fmt_int(freq),
@@ -2146,7 +2156,7 @@ class HuffmanTreeAdapter:
         return ns
     
     @staticmethod
-    def _queue_positions(nodes: List, start_x=60, y=110, min_spacing=130, max_spacing=220, canvas_width: int = 1280, margin: int = 60):
+    def _queue_positions(nodes: List, start_x=60, y=110, min_spacing=150, max_spacing=260, canvas_width: int = 1280, margin: int = 60):
         if not nodes:
             return {}
         if len(nodes) <= 1:
@@ -2165,7 +2175,7 @@ class HuffmanTreeAdapter:
         return a + (b - a) * t
     
     @staticmethod
-    def _layout_tree(node, center_x, y, level_h=90, node_w=60, min_spacing=110):
+    def _layout_tree(node, center_x, y, level_h=95, node_w=72, min_spacing=130):
         """水平布局整棵树（宽度递归，防重叠，间距稍放大以更匀称）"""
         if not node:
             return {}
@@ -2589,7 +2599,7 @@ class HuffmanTreeAdapter:
 
 class AVLAdapter:
     """AVL树适配器 - 支持平衡因子显示和旋转动画"""
-    NODE_DIAMETER = 60
+    NODE_DIAMETER = 72
     NODE_RADIUS = NODE_DIAMETER / 2
     
     @staticmethod
@@ -2746,7 +2756,7 @@ class AVLAdapter:
             AVLAdapter._add_edges(node.right, positions, snapshot)
     
     @staticmethod
-    def to_snapshot(avl, start_x=640, y=200, level_height=120, node_width=60, min_spacing=100) -> StructureSnapshot:
+    def to_snapshot(avl, start_x=640, y=200, level_height=130, node_width=72, min_spacing=120) -> StructureSnapshot:
         """将AVL树转换为快照 - 支持平衡因子显示和旋转动画"""
         snapshot = StructureSnapshot()
         snapshot.hint_text = f"AVL平衡二叉树 (节点数: {len(avl.traverse_inorder())})"
