@@ -381,16 +381,8 @@ class SequentialListAdapter:
                             snapshot.boxes.append(arrow_box)
                 
                 # 添加插入位置指示器
-                insert_indicator = BoxSnapshot(
-                    id="insert_indicator",
-                    value="INSERT",
-                    x=target_x,
-                    y=target_y - 60,
-                    width=box_width,
-                    height=25,
-                    color="#00FF00"  # 绿色表示插入位置
-                )
-                snapshot.boxes.append(insert_indicator)
+                # 不在节点旁绘制“INSERT”提示，改用右下角步骤说明
+                snapshot.step_details.append("顺序表插入：新元素移动到目标位置，并推动后续元素右移")
         
         # 如果正在删除动画，显示元素向前移动效果
         elif animation_state == 'deleting':
@@ -490,6 +482,18 @@ class LinkedListAdapter:
         """将链表转换为快照"""
         snapshot = StructureSnapshot()
         snapshot.hint_text = f"链表 (长度: {linked_list.size()})"
+
+        # 默认布局优化：若使用默认参数，则把链表整体放到屏幕中间
+        # （不改变每个节点的水平间距，仅调整整体起点与纵向位置）
+        if start_x == 100 and y == 200:
+            canvas_w, canvas_h = 1280, 720
+            node_width, node_height = 80, 40
+            n = max(0, int(linked_list.size() or 0))
+            if n > 0:
+                total_w = node_width + (n - 1) * node_spacing
+                start_x = max(40, (canvas_w - total_w) / 2)
+            # 让节点行尽量靠近垂直居中
+            y = (canvas_h - node_height) / 2
         
         # 获取动画状态
         animation_state = getattr(linked_list, '_animation_state', None)
@@ -607,7 +611,7 @@ class LinkedListAdapter:
                 # 没有下一个节点，显示NULL
                 null_box = BoxSnapshot(
                     id=f"{node_id}_null",
-                    value="NULL",
+                    value="/",
                     x=separator_x + 5,
                     y=y + 5,
                     width=node_width - (separator_x - node_x) - 10,
@@ -951,16 +955,8 @@ class LinkedListAdapter:
                 else:
                     indicator_text = "整体后移"
                 
-                insert_indicator = BoxSnapshot(
-                    id="insert_indicator",
-                    value=indicator_text,
-                    x=new_x - 20,
-                    y=new_y - 30,
-                    width=120,
-                    height=20,
-                    color="#FF6B6B"
-                )
-                snapshot.boxes.append(insert_indicator)
+                # 不在节点旁绘制红色提示框，改用右下角步骤说明
+                snapshot.step_details.append(f"链表插入：{indicator_text}")
                 
                 # 分阶段显示箭头连接和节点移动
                 if animation_progress > 0.2:

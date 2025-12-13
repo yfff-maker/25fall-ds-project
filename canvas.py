@@ -210,7 +210,13 @@ class Canvas(QObject):
         # 创建方框
         rect = QGraphicsRectItem(0, 0, box.width, box.height)
         rect.setBrush(QBrush(QColor(box.color)))
-        rect.setPen(QPen(Qt.black, 1))
+        # 支持可选边框样式（用于更简洁的组件，比如链表节点）
+        border_color = getattr(box, "border_color", None)
+        border_width = getattr(box, "border_width", 1)
+        if border_color is not None:
+            rect.setPen(QPen(QColor(border_color), border_width))
+        else:
+            rect.setPen(QPen(Qt.black, 1))
         rect.setPos(box.x, box.y)
         
         # 创建文本标签
