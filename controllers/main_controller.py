@@ -1639,8 +1639,8 @@ class MainController(QObject):
                 # 使用定时器实现平滑动画
                 self._restart_animation_timer(lambda: self._update_avl_animation(structure), 50)
                 
-                # 设置动画总时长（进一步放慢旋转动画）
-                self._animation_duration = 4500  # 4.5秒总时长
+                # 设置动画总时长：缩短非旋转停顿，旋转绝对时长保持原水平
+                self._animation_duration = 5000  # 5秒总时长
                 self._animation_start_time = 0
                 
                 self._update_snapshot()

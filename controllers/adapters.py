@@ -1446,8 +1446,8 @@ class BinaryTreeAdapter:
         BinaryTreeAdapter._add_edges(binary_tree.root, positions, snapshot)
         
         # 显示根指针 - 放在根节点上方
-        root_pointer_x = start_x - 30  # 与根节点中心对齐
-        root_pointer_y = y - 50  # 在根节点上方
+        root_pointer_x = start_x - 3 # 更贴近根节点
+        root_pointer_y = y - 40
         root_pointer_box = BoxSnapshot(
             id="root_pointer",
             value="root",
@@ -2218,7 +2218,7 @@ class HuffmanTreeAdapter:
         return pos
     
     @staticmethod
-    def _add_tree_edges(root, positions, snapshot):
+    def _add_tree_edges(root, positions, snapshot, radii: Optional[Dict] = None):
         if not root:
             return
         
@@ -2227,17 +2227,21 @@ class HuffmanTreeAdapter:
                 return
             x, y = positions[n]
             nid = f"final_{id(n)}"
+            # 端点锚到节点外轮廓：父节点底部中心 -> 子节点顶部中心
+            rp = float((radii or {}).get(n, 36))
             if n.left:
                 lx, ly = positions[n.left]
+                rc = float((radii or {}).get(n.left, 36))
                 e = EdgeSnapshot(from_id=nid, to_id=f"final_{id(n.left)}", color="#2E86AB", arrow_type="line")
-                e.from_x, e.from_y = x, y
-                e.to_x, e.to_y = lx, ly
+                e.from_x, e.from_y = x, y + rp
+                e.to_x, e.to_y = lx, ly - rc
                 snapshot.edges.append(e)
             if n.right:
                 rx, ry = positions[n.right]
+                rc = float((radii or {}).get(n.right, 36))
                 e = EdgeSnapshot(from_id=nid, to_id=f"final_{id(n.right)}", color="#2E86AB", arrow_type="line")
-                e.from_x, e.from_y = x, y
-                e.to_x, e.to_y = rx, ry
+                e.from_x, e.from_y = x, y + rp
+                e.to_x, e.to_y = rx, ry - rc
                 snapshot.edges.append(e)
             walk(n.left)
             walk(n.right)
@@ -2245,26 +2249,33 @@ class HuffmanTreeAdapter:
         walk(root)
     
     @staticmethod
-    def _add_tree_edges_for_positions(root, positions, snapshot):
+    def _add_tree_edges_for_positions(root, positions, snapshot, radii: Optional[Dict] = None):
         """仅对给定 positions 中的子树添加边"""
         if not root:
             return
         def walk(n):
             if not n:
                 return
+            rp = float((radii or {}).get(n, 36))
             if n.left and n.left in positions:
+                rc = float((radii or {}).get(n.left, 36))
                 e = EdgeSnapshot(from_id=f"hf_{HuffmanTreeAdapter._node_id(n)}",
                                  to_id=f"hf_{HuffmanTreeAdapter._node_id(n.left)}",
                                  color="#52A1FF", arrow_type="line")
-                e.from_x, e.from_y = positions[n]
-                e.to_x, e.to_y = positions[n.left]
+                px, py = positions[n]
+                cx, cy = positions[n.left]
+                e.from_x, e.from_y = px, py + rp
+                e.to_x, e.to_y = cx, cy - rc
                 snapshot.edges.append(e)
             if n.right and n.right in positions:
+                rc = float((radii or {}).get(n.right, 36))
                 e = EdgeSnapshot(from_id=f"hf_{HuffmanTreeAdapter._node_id(n)}",
                                  to_id=f"hf_{HuffmanTreeAdapter._node_id(n.right)}",
                                  color="#52A1FF", arrow_type="line")
-                e.from_x, e.from_y = positions[n]
-                e.to_x, e.to_y = positions[n.right]
+                px, py = positions[n]
+                cx, cy = positions[n.right]
+                e.from_x, e.from_y = px, py + rp
+                e.to_x, e.to_y = cx, cy - rc
                 snapshot.edges.append(e)
             walk(n.left)
             walk(n.right)
@@ -2343,18 +2354,20 @@ class HuffmanTreeAdapter:
         pos_before = _queue_positions(queue_before)
         pos_after = _queue_positions(queue_after)
 
-        def draw_subtree(node, cx, cy, root_color, scale=1.0, level_h=90, node_w=60, spacing=120):
+        def draw_subtree(node, cx, cy, root_color, scale=1.0, level_h=120, node_w=72, spacing=130):
             """在队列位置绘制一棵子树（与初始节点等大）"""
             if not node:
                 return
             mini_pos = HuffmanTreeAdapter._layout_tree(node, cx, cy, level_h=level_h, node_w=node_w, min_spacing=spacing)
+            radii = {}
             for nd, (nx, ny) in mini_pos.items():
                 nid = f"hf_{HuffmanTreeAdapter._node_id(nd)}"
                 label = getattr(nd, "char", None) or "*"
                 color = root_color if nd is node else HuffmanTreeAdapter.BASE_BLUE
                 text_color = "#FFD700" if getattr(nd, "char", None) else "#FFFFFF"
-                HuffmanTreeAdapter._append_circle(snapshot, nid, getattr(nd, "freq", 0), label, nx, ny, color, scale=scale, text_color=text_color)
-            HuffmanTreeAdapter._add_tree_edges_for_positions(node, mini_pos, snapshot)
+                ns = HuffmanTreeAdapter._append_circle(snapshot, nid, getattr(nd, "freq", 0), label, nx, ny, color, scale=scale, text_color=text_color)
+                radii[nd] = (ns.width or 72) / 2
+            HuffmanTreeAdapter._add_tree_edges_for_positions(node, mini_pos, snapshot, radii=radii)
         
         def draw_moving_subtree(node, cx, cy, root_color):
             """移动阶段的子树绘制：整棵子树跟随根节点移动"""
@@ -2362,7 +2375,7 @@ class HuffmanTreeAdapter:
                 return
             node_w = 60
             min_spacing = 110
-            level_h = 85
+            level_h = 120
 
             def calc_width(n):
                 if not n:
@@ -2399,13 +2412,15 @@ class HuffmanTreeAdapter:
                 return positions
 
             positions = layout(node, cx, cy)
+            radii = {}
             for nd, (nx, ny) in positions.items():
                 nid = f"hf_{HuffmanTreeAdapter._node_id(nd)}"
                 label = getattr(nd, "char", None) or "*"
                 color = root_color if nd is node else HuffmanTreeAdapter.BASE_BLUE
                 text_color = "#FFD700" if getattr(nd, "char", None) else "#FFFFFF"
-                HuffmanTreeAdapter._append_circle(snapshot, nid, getattr(nd, "freq", 0), label, nx, ny, color, text_color=text_color)
-            HuffmanTreeAdapter._add_tree_edges_for_positions(node, positions, snapshot)
+                ns = HuffmanTreeAdapter._append_circle(snapshot, nid, getattr(nd, "freq", 0), label, nx, ny, color, text_color=text_color)
+                radii[nd] = (ns.width or 72) / 2
+            HuffmanTreeAdapter._add_tree_edges_for_positions(node, positions, snapshot, radii=radii)
 
         def draw_queue(nodes, positions, faded_nodes=None):
             faded_nodes = faded_nodes or set()
@@ -2417,7 +2432,7 @@ class HuffmanTreeAdapter:
                 text_color = "#FFD700" if getattr(n, "char", None) else "#FFFFFF"
                 if getattr(n, "left", None) or getattr(n, "right", None):
                     # 内部节点：画一颗缩放的子树，根节点用当前颜色
-                    draw_subtree(n, nx, ny, color, scale=0.78, level_h=70, node_w=50, spacing=95)
+                    draw_subtree(n, nx, ny, color, scale=0.78, level_h=105, node_w=72, spacing=120)
                 else:
                     HuffmanTreeAdapter._append_circle(snapshot, nid, getattr(n, "freq", 0), label, nx, ny, color, scale=1.0, text_color=text_color)
 
@@ -2499,28 +2514,32 @@ class HuffmanTreeAdapter:
                 px = HuffmanTreeAdapter._lerp(px0, target[0], progress)
                 py = HuffmanTreeAdapter._lerp(py0, target[1], progress)
                 # 使用布局算法让子树随父节点一起回队列，保持结构可见
-                subtree_pos = HuffmanTreeAdapter._layout_tree(parent, px, py, level_h=80, node_w=60, min_spacing=100)
+                subtree_pos = HuffmanTreeAdapter._layout_tree(parent, px, py, level_h=130, node_w=72, min_spacing=130)
+                radii = {}
                 for node, (nx, ny) in subtree_pos.items():
                     nid = f"hf_{HuffmanTreeAdapter._node_id(node)}"
                     label = getattr(node, "char", None) or "*"
                     color = HuffmanTreeAdapter.GREEN if node is parent else HuffmanTreeAdapter.BASE_BLUE
                     text_color = "#FFD700" if getattr(node, "char", None) else "#FFFFFF"
-                    HuffmanTreeAdapter._append_circle(snapshot, nid, getattr(node, "freq", 0), label, nx, ny, color, text_color=text_color)
-                HuffmanTreeAdapter._add_tree_edges_for_positions(parent, subtree_pos, snapshot)
+                    ns = HuffmanTreeAdapter._append_circle(snapshot, nid, getattr(node, "freq", 0), label, nx, ny, color, text_color=text_color)
+                    radii[node] = (ns.width or 72) / 2
+                HuffmanTreeAdapter._add_tree_edges_for_positions(parent, subtree_pos, snapshot, radii=radii)
             step_details.append("父节点携子树回到队列，等待下一轮")
 
         elif state == "done":
             # 展示最终树
             if huffman.root:
-                pos = HuffmanTreeAdapter._layout_tree(huffman.root, tree_cx, tree_y, level_h=100, node_w=60, min_spacing=120)
+                pos = HuffmanTreeAdapter._layout_tree(huffman.root, tree_cx, tree_y, level_h=140, node_w=72, min_spacing=140)
                 code_map = HuffmanTreeAdapter._collect_codes(huffman.root, "", {})
+                radii = {}
                 for n, (nx, ny) in pos.items():
                     nid = f"final_{id(n)}"
                     label = getattr(n, "char", None) or "*"
                     color = HuffmanTreeAdapter.GREEN if n is huffman.root else HuffmanTreeAdapter.BASE_BLUE
                     text_color = "#FFD700" if getattr(n, "char", None) else "#FFFFFF"
-                    HuffmanTreeAdapter._append_circle(snapshot, nid, n.freq, label, nx, ny, color, text_color=text_color)
-                HuffmanTreeAdapter._add_tree_edges(huffman.root, pos, snapshot)
+                    ns = HuffmanTreeAdapter._append_circle(snapshot, nid, n.freq, label, nx, ny, color, text_color=text_color)
+                    radii[n] = (ns.width or 72) / 2
+                HuffmanTreeAdapter._add_tree_edges(huffman.root, pos, snapshot, radii=radii)
                 
                 # 为边添加0/1标签，增强可视性
                 def add_edge_labels(node):
@@ -3084,9 +3103,12 @@ class AVLAdapter:
         # 生成边快照
         AVLAdapter._add_edges(avl.root, render_positions, snapshot)
         
-        # 显示根指针 - 放在根节点上方
-        root_pointer_x = start_x - 30  # 与根节点中心对齐
-        root_pointer_y = y - 50  # 在根节点上方
+        # 显示根指针 - 动态贴在根节点左侧
+        root_cx, root_cy = render_positions.get(avl.root, (start_x, y))
+        badge_w, badge_h = 60, 30
+        gap = 12  # 与根节点水平间距
+        root_pointer_x = root_cx - AVLAdapter.NODE_RADIUS - gap - badge_w
+        root_pointer_y = root_cy - badge_h / 2
         root_pointer_box = BoxSnapshot(
             id="root_pointer",
             value="root",
@@ -3106,10 +3128,10 @@ class AVLAdapter:
             color="#FFD700",
             arrow_type="arrow"
         )
-        root_arrow.from_x = root_pointer_x + 30
-        root_arrow.from_y = root_pointer_y + 30
-        root_arrow.to_x = start_x
-        root_arrow.to_y = y - AVLAdapter.NODE_RADIUS
+        root_arrow.from_x = root_pointer_x + badge_w
+        root_arrow.from_y = root_pointer_y + badge_h / 2
+        root_arrow.to_x = root_cx - AVLAdapter.NODE_RADIUS
+        root_arrow.to_y = root_cy
         snapshot.edges.append(root_arrow)
         
         return snapshot

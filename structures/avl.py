@@ -40,8 +40,9 @@ class AVLModel(BaseStructure):
         self._current_check_bf = None
         self._rotation_plan = None        # {'type': 'LL'|..., 'nodes': [...]} 用于动画展示
         # 插入动画阶段：比较 -> 检查 -> 高亮提示 -> 旋转
-        # 在先前加长基础上再延长3倍，使红/黄节点停留时间更久
-        self._phase_breaks = (0.0279, 0.0558, 0.8058, 1.0)
+        # 缩短非旋转停顿，保持旋转阶段时长不变（约19.4%的进度区间）
+        # p4固定为1，保持旋转区间 (p4 - p3) ≈ 0.233，搭配 5s 总时长得到与旧版相同的旋转绝对时长
+        self._phase_breaks = (0.0266, 0.0531, 0.7670, 1.0)
         self._insert_committed = False    # 是否已将真实节点插入但未旋转
         self._rotation_applied = False    # 是否已执行计划中的旋转
 
