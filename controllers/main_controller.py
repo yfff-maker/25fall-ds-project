@@ -1852,8 +1852,21 @@ class MainController(QObject):
                 # 使用定时器实现平滑动画
                 self._restart_animation_timer(lambda: self._update_avl_animation(structure), 50)
                 
-                # 设置动画总时长：缩短非旋转停顿，旋转绝对时长保持原水平
-                self._animation_duration = 5000  # 5秒总时长
+                # 设置阶段分布 & 动画总时长：
+                # - 无需旋转：阶段划分改为 BST 风格 (0.25, 0.5, 0.75, 1.0)，总时长约 1s，保证比较/高亮停留够长
+                # - 需要旋转：恢复 AVL 默认分段 (0.0266, 0.0531, 0.7670, 1.0)，总时长 5s 保留原旋转效果
+                has_rotation = False
+                if hasattr(structure, "has_pending_rotation") and callable(structure.has_pending_rotation):
+                    try:
+                        has_rotation = bool(structure.has_pending_rotation())
+                    except Exception:
+                        has_rotation = False
+                if has_rotation:
+                    structure._phase_breaks = (0.0266, 0.0531, 0.7670, 1.0)
+                    self._animation_duration = 5000
+                else:
+                    structure._phase_breaks = (0.25, 0.5, 0.75, 1.0)
+                    self._animation_duration = 1000
                 self._animation_start_time = 0
                 
                 self._update_snapshot()
