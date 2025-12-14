@@ -388,6 +388,9 @@ class MainController(QObject):
             values_list = list(data)
             structure = self._get_current_structure()
             if structure:
+                # 先清空，防止同样数据不触发重绘
+                if hasattr(structure, "clear"):
+                    structure.clear()
                 structure.build(values_list)
                 self._update_snapshot()
                 text_repr = input_text.strip() if isinstance(input_text, str) else str(input_text)
@@ -496,6 +499,8 @@ class MainController(QObject):
             values_list = list(data_generator)
             structure = self._get_current_structure()
             if structure:
+                if hasattr(structure, "clear"):
+                    structure.clear()
                 # 开始构建动画
                 structure.build(values_list)
                 self._update_snapshot()
@@ -843,6 +848,11 @@ class MainController(QObject):
             if not structure:
                 self._show_error("构建失败", "BST结构不存在")
                 return
+            if hasattr(structure, "clear"):
+                structure.clear()
+            # 清空旧BST，确保同样数据也会重绘
+            if hasattr(structure, "clear"):
+                structure.clear()
             
             # 初始化队列
             self._bst_build_queue = list(values) if isinstance(values, list) else [v.strip() for v in str(values).split(',') if v.strip()]
@@ -878,6 +888,8 @@ class MainController(QObject):
             if not structure:
                 self._show_error("构建失败", "AVL结构不存在")
                 return
+            if hasattr(structure, "clear"):
+                structure.clear()
             
             # 如果已有批量构建在进行，先停止当前动画
             timer = getattr(self, '_animation_timer', None)
@@ -960,6 +972,8 @@ class MainController(QObject):
             data = self._parse_comma_separated_values(input_text)
             structure = self._get_current_structure()
             if structure:
+                if hasattr(structure, "clear"):
+                    structure.clear()
                 # 开始构建动画
                 data_list = list(data)
                 structure.build(data_list)
@@ -1124,6 +1138,10 @@ class MainController(QObject):
             structure = self.structures.get("BinaryTree")
             if not structure:
                 return
+            
+            # 清空旧树，防止相同数据不触发刷新或残留旧形状
+            if hasattr(structure, "clear"):
+                structure.clear()
             
             # 如果tree为空，先创建根节点
             if structure.root is None and values:
@@ -1515,6 +1533,8 @@ class MainController(QObject):
             freq_dict = self._parse_frequency_mapping(freq_text)
             structure = self._get_current_structure()
             if structure:
+                if hasattr(structure, "clear"):
+                    structure.clear()
                 structure.build(freq_dict)
                 self._update_snapshot()
                 if isinstance(freq_text, str):

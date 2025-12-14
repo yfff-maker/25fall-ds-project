@@ -126,7 +126,8 @@ class ActionExecutor:
     
     def _execute_binary_tree(self, operation: str, params: Dict) -> Tuple[bool, str]:
         """执行二叉树操作"""
-        if operation == "create":
+        # 兼容多种“构建”别名（LLM/DSL 可能输出 build/build_level 等）
+        if operation in ("create", "build", "build_level", "build_level_order", "level_build"):
             values = params.get("values", [])
             self.controller.build_binary_tree(values)
             return True, f"已构建二叉树: {','.join(values)}"
@@ -141,7 +142,7 @@ class ActionExecutor:
     
     def _execute_bst(self, operation: str, params: Dict) -> Tuple[bool, str]:
         """执行BST操作"""
-        if operation == "create":
+        if operation in ("create", "build"):
             values = params.get("values", [])
             self.controller.build_bst(values)
             return True, f"正在构建BST: {','.join(values)}"

@@ -2329,8 +2329,8 @@ class HuffmanTreeAdapter:
 
         def draw_subtree(node, cx, cy, root_color, scale=1.0, level_h=120, node_w=72, spacing=130):
             """在队列位置绘制一棵子树（与初始节点等大）"""
-        if not node:
-            return
+            if not node:
+                return
             mini_pos = HuffmanTreeAdapter._layout_tree(node, cx, cy, level_h=level_h, node_w=node_w, min_spacing=spacing)
             radii = {}
             for nd, (nx, ny) in mini_pos.items():
@@ -2338,7 +2338,9 @@ class HuffmanTreeAdapter:
                 label = getattr(nd, "char", None) or "*"
                 color = root_color if nd is node else HuffmanTreeAdapter.BASE_BLUE
                 text_color = "#FFD700" if getattr(nd, "char", None) else "#FFFFFF"
-                ns = HuffmanTreeAdapter._append_circle(snapshot, nid, getattr(nd, "freq", 0), label, nx, ny, color, scale=scale, text_color=text_color)
+                ns = HuffmanTreeAdapter._append_circle(
+                    snapshot, nid, getattr(nd, "freq", 0), label, nx, ny, color, scale=scale, text_color=text_color
+                )
                 radii[nd] = (ns.width or 72) / 2
             HuffmanTreeAdapter._add_tree_edges_for_positions(node, mini_pos, snapshot, radii=radii)
         

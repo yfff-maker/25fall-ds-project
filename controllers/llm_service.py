@@ -155,6 +155,7 @@ class LLMService:
 
 5. BST (二叉搜索树):
    - create: {"structure_type": "BST", "operation": "create", "parameters": {"values": ["50","30","70"]}}
+   - build: {"structure_type": "BST", "operation": "build", "parameters": {"values": ["50","30","70"]}}
    - insert: {"structure_type": "BST", "operation": "insert", "parameters": {"value": "25"}}
    - search: {"structure_type": "BST", "operation": "search", "parameters": {"value": "30"}}
    - delete: {"structure_type": "BST", "operation": "delete", "parameters": {"value": "30"}}
@@ -172,6 +173,10 @@ class LLMService:
 - position参数是整数（数组索引从0开始）
 - 对于二叉树插入，position可以是"left"或"right"
 - 只返回JSON对象，不要包含其他文本
+
+操作名约束（BinaryTree，非常重要）：
+- 当用户说“构建/创建二叉树，节点值为[...]（层序）”时，一律输出 operation="create"（或兼容 build，但推荐 create）
+- 不要输出 build_level / build_level_order / level_build / 其它自造名字
 
 位置口径统一（非常重要）：
 - “第N个位置”一律按 **从0开始的下标** 解释，也就是 JSON 中必须写成 `"position": N`，不要做 N-1。
