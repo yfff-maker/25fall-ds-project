@@ -92,6 +92,9 @@ class MainController(QObject):
         self._animation_paused: bool = False
         self._paused_elapsed: float = 0.0  # 毫秒
         self.current_llm_model: Optional[str] = self.llm_service.default_model
+        # 动画倍速（0.5/1/1.5/2），影响所有统一定时器与持续时间
+        self._speed_multiplier: float = 1.0
+        self._current_base_interval: int = 0  # 记录最近一次启动定时器的基准间隔
         
         self._update_snapshot()
     
@@ -198,7 +201,21 @@ class MainController(QObject):
         self._animation_paused = False
         self._paused_elapsed = 0.0
         self._animation_timer.timeout.connect(callback)
-        self._animation_timer.start(interval)
+        self._current_base_interval = interval
+        effective_interval = self._apply_speed_interval(interval)
+        self._animation_timer.start(effective_interval)
+
+    def _apply_speed_interval(self, base_interval: int) -> int:
+        """根据倍速调整定时器间隔（倍速大→间隔小，默认1x不变）"""
+        base = max(1, int(base_interval))
+        speed = max(0.1, float(self._speed_multiplier))
+        return max(5, int(base / speed))
+
+    def _calc_progress(self, elapsed: float) -> float:
+        """将耗时转换为进度，受倍速影响"""
+        duration = max(1.0, float(self._animation_duration))
+        speed = max(0.1, float(self._speed_multiplier))
+        return min((elapsed * speed) / duration, 1.0)
     
     def pause_current_animation(self):
         """通用暂停：哈夫曼走专用逻辑，其它结构暂停统一定时器"""
@@ -322,7 +339,7 @@ class MainController(QObject):
         elapsed = current_time - self._animation_start_time
         
         # 计算动画进度 (0.0 到 1.0)
-        progress = min(elapsed / self._animation_duration, 1.0)
+        progress = self._calc_progress(elapsed)
         structure.update_animation_progress(progress)
         
         # 更新显示
@@ -496,7 +513,7 @@ class MainController(QObject):
         elapsed = current_time - self._animation_start_time
         
         # 计算动画进度 (0.0 到 1.0)
-        progress = min(elapsed / self._animation_duration, 1.0)
+        progress = self._calc_progress(elapsed)
         structure.update_animation_progress(progress)
         
         # 更新显示
@@ -524,7 +541,7 @@ class MainController(QObject):
         elapsed = current_time - self._animation_start_time
         
         # 计算动画进度 (0.0 到 1.0)
-        progress = min(elapsed / self._animation_duration, 1.0)
+        progress = self._calc_progress(elapsed)
         structure.update_animation_progress(progress)
         
         # 更新显示
@@ -550,7 +567,7 @@ class MainController(QObject):
         elapsed = current_time - self._animation_start_time
         
         # 计算动画进度 (0.0 到 1.0)
-        progress = min(elapsed / self._animation_duration, 1.0)
+        progress = self._calc_progress(elapsed)
         structure.update_animation_progress(progress)
         
         # 更新显示
@@ -596,7 +613,7 @@ class MainController(QObject):
         elapsed = current_time - self._animation_start_time
         
         # 计算动画进度 (0.0 到 1.0)
-        progress = min(elapsed / self._animation_duration, 1.0)
+        progress = self._calc_progress(elapsed)
         
         # 根据动画状态选择不同的更新方法
         if structure._animation_state == 'inserting':
@@ -824,7 +841,7 @@ class MainController(QObject):
         elapsed = current_time - self._animation_start_time
         
         # 计算动画进度 (0.0 到 1.0)
-        progress = min(elapsed / self._animation_duration, 1.0)
+        progress = self._calc_progress(elapsed)
         structure.update_animation_progress(progress)
         
         # 处理构建动画的逐步显示
@@ -1155,7 +1172,7 @@ class MainController(QObject):
         elapsed = current_time - self._animation_start_time
         
         # 计算动画进度 (0.0 到 1.0)
-        progress = min(elapsed / self._animation_duration, 1.0)
+        progress = self._calc_progress(elapsed)
         structure.update_search_animation(progress)
         
         # 更新显示
@@ -1188,7 +1205,7 @@ class MainController(QObject):
         elapsed = current_time - self._animation_start_time
         
         # 计算动画进度 (0.0 到 1.0)
-        progress = min(elapsed / self._animation_duration, 1.0)
+        progress = self._calc_progress(elapsed)
         structure.update_delete_animation(progress)
         
         # 更新显示
@@ -1302,7 +1319,7 @@ class MainController(QObject):
         current_time = time.time() * 1000
         elapsed = current_time - self._animation_start_time
 
-        progress = min(elapsed / self._animation_duration, 1.0)
+        progress = self._calc_progress(elapsed)
         structure.update_traversal_animation(progress)
 
         self._update_snapshot()
@@ -1395,7 +1412,7 @@ class MainController(QObject):
             self._animation_start_time = time.time() * 1000.0
         now = time.time() * 1000.0
         elapsed = now - self._animation_start_time
-        progress = min(elapsed / self._animation_duration, 1.0)
+        progress = self._calc_progress(elapsed)
         
         structure.update_animation(progress)
         self._update_snapshot()
@@ -1485,7 +1502,7 @@ class MainController(QObject):
         elapsed = current_time - self._animation_start_time
         
         # 计算动画进度 (0.0 到 1.0)
-        progress = min(elapsed / self._animation_duration, 1.0)
+        progress = self._calc_progress(elapsed)
         structure.update_animation_progress(progress)
         
         # 处理构建动画的逐步显示
@@ -1667,7 +1684,7 @@ class MainController(QObject):
         elapsed = current_time - self._animation_start_time
         
         # 计算动画进度 (0.0 到 1.0)
-        progress = min(elapsed / self._animation_duration, 1.0)
+        progress = self._calc_progress(elapsed)
         
         # 调用四阶段动画更新方法（关键修改）
         structure.update_insert_animation(progress)
@@ -1843,6 +1860,19 @@ class MainController(QObject):
     def get_llm_model(self) -> Optional[str]:
         """获取当前模型，若未设置则返回默认值"""
         return self.current_llm_model or self.llm_service.default_model
+
+    # ========== 动画倍速管理 ==========
+    def set_speed_multiplier(self, multiplier: float):
+        """设置全局动画倍速（影响统一定时器与进度计算）"""
+        try:
+            multiplier = float(multiplier)
+        except (TypeError, ValueError):
+            multiplier = 1.0
+        multiplier = max(0.1, multiplier)
+        self._speed_multiplier = multiplier
+        timer = getattr(self, "_animation_timer", None)
+        if timer and self._current_base_interval:
+            timer.setInterval(self._apply_speed_interval(self._current_base_interval))
 
     # ========== LLM 上下文管理 ==========
     def load_llm_context_from_file(self, path: str) -> Tuple[bool, str, int]:

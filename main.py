@@ -146,8 +146,7 @@ class MainWindow(QMainWindow):
             # wire control panel
             self.ctrl_panel.playClicked.connect(self._handle_play_clicked)
             self.ctrl_panel.pauseClicked.connect(self._handle_pause_clicked)
-            self.ctrl_panel.stepClicked.connect(self._handle_step_clicked)
-            self.ctrl_panel.speedChanged.connect(self.canvas.animator_speed)
+            self.ctrl_panel.speedChanged.connect(self._handle_speed_changed)
 
             # 初始化主题菜单勾选状态
             self._update_theme_action_checks(self.theme_helper.current_mode)
@@ -749,6 +748,11 @@ class MainWindow(QMainWindow):
         else:
             # 其他数据结构的动画控制
             self.canvas.animator_step()
+    
+    def _handle_speed_changed(self, multiplier: float):
+        """倍速调节：同步控制器定时器与旧动画器"""
+        self.controller.set_speed_multiplier(multiplier)
+        self.canvas.animator_speed(multiplier)
     
     def _handle_execute_dsl(self):
         """执行DSL命令"""

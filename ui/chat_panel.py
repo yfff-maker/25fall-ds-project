@@ -148,8 +148,9 @@ class ChatPanel(QWidget):
 
     def _init_model_combo(self):
         """初始化模型选项"""
-        default_model = os.getenv("OPENROUTER_MODEL") or self._DEFAULT_MODELS[0]
-        models = list(dict.fromkeys(self._DEFAULT_MODELS + [default_model]))
+        default_model = "openai/gpt-3.5-turbo"  # 默认固定为 gpt-3.5
+        env_model = os.getenv("OPENROUTER_MODEL")
+        models = list(dict.fromkeys([default_model, env_model] + self._DEFAULT_MODELS)) if env_model else self._DEFAULT_MODELS
         self.model_combo.addItems(models)
         self.model_combo.setCurrentText(default_model)
 

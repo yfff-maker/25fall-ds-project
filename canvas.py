@@ -18,7 +18,9 @@ class Animator(QObject):
         self.timer = QTimer()
         self.timer.timeout.connect(self._tick)
         self.playing = False
-        self.interval_ms = 500
+        self.base_interval_ms = 500
+        self.speed_multiplier = 1.0
+        self.interval_ms = self.base_interval_ms
 
     def add_step(self, func):
         self.queue.append(func)
@@ -26,9 +28,14 @@ class Animator(QObject):
     def clear(self):
         self.queue.clear()
 
-    def set_speed(self, speed: int):
-        speed = max(1, min(100, speed))
-        self.interval_ms = int(1050 - speed * 10)
+    def set_speed(self, multiplier: float):
+        """设置倍速（0.5/1/1.5/2等），倍速越大间隔越短"""
+        try:
+            multiplier = float(multiplier)
+        except (TypeError, ValueError):
+            multiplier = 1.0
+        self.speed_multiplier = max(0.1, multiplier)
+        self.interval_ms = max(10, int(self.base_interval_ms / self.speed_multiplier))
         if self.playing and self.timer.isActive():
             self.timer.setInterval(self.interval_ms)
 
@@ -237,10 +244,10 @@ class Canvas(QObject):
         text_color = getattr(box, 'text_color', '#000000')
         label.setDefaultTextColor(QColor(text_color))
         # 下标（index_）字号更小：约为原来的 1/2；其它保持不变
-        font = QFont("Segoe UI", 11)
+        font = QFont("Segoe UI", 13)
         box_id = getattr(box, "id", "")
         if box_id.startswith("index_"):
-            font.setPointSize(6)
+            font.setPointSize(7)
         elif box_id.startswith("balance_"):
             font.setPointSize(9)
         font.setWeight(QFont.Medium)

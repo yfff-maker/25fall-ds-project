@@ -194,7 +194,7 @@ class SequentialListAdapter:
     """顺序表适配器"""
     
     @staticmethod
-    def to_snapshot(sequential_list, start_x=100, y=200, box_width=60, box_height=40) -> StructureSnapshot:
+    def to_snapshot(sequential_list, start_x=100, y=200, box_width=88, box_height=56) -> StructureSnapshot:
         """将顺序表转换为快照"""
         snapshot = StructureSnapshot() # ← 创建：创建 StructureSnapshot 实例
         list_size = sequential_list.length()
@@ -215,7 +215,7 @@ class SequentialListAdapter:
         # 自动换行布局参数（水平间距保持不变；通过 row_gap 增大行距）
         canvas_width = 1200  # 画布宽度
         elements_per_row = max(1, canvas_width // box_width)  # 每行最多元素数量
-        row_gap = 60  # 行间距（仅影响垂直方向，提升清晰度）
+        row_gap = 80  # 行间距（仅影响垂直方向，提升清晰度）
         
         # 动态绘制元素（只绘制实际存在的元素）
         for i in range(list_size):
@@ -479,16 +479,16 @@ class LinkedListAdapter:
     """链表适配器"""
     
     @staticmethod
-    def to_snapshot(linked_list, start_x=100, y=200, node_spacing=120) -> StructureSnapshot:
+    def to_snapshot(linked_list, start_x=100, y=200, node_spacing=150) -> StructureSnapshot:
         """将链表转换为快照"""
         snapshot = StructureSnapshot()
         snapshot.hint_text = f"链表 (长度: {linked_list.size()})"
 
         # 默认布局优化：若使用默认参数，则把链表整体放到屏幕中间
         # （不改变每个节点的水平间距，仅调整整体起点与纵向位置）
+        node_width, node_height = 110, 56
         if start_x == 100 and y == 200:
             canvas_w, canvas_h = 1280, 720
-            node_width, node_height = 80, 40
             n = max(0, int(linked_list.size() or 0))
             if n > 0:
                 total_w = node_width + (n - 1) * node_spacing
@@ -553,8 +553,7 @@ class LinkedListAdapter:
                 node_x = _node_x_delete(i)
             else:
                 node_x = _node_x(i)
-            node_width = 80  # 节点宽度
-            node_height = 40  # 节点高度
+            # 使用统一的节点尺寸
             
             # 创建节点方框（分为左右两个区域）
             node_box = BoxSnapshot(
@@ -678,8 +677,8 @@ class LinkedListAdapter:
             # 确保 p 与 succ 存在（succ 可能不存在于尾删）
             list_len = linked_list.size()
             if p_idx >= 0 and succ_idx < list_len:
-                node_width = 80
-                node_height = 40
+                node_width = node_width
+                node_height = node_height
                 # 端点（与直线一致）：p 的右侧中心 -> succ 的左侧中心
                 p_right_x = _node_x_delete(p_idx) + node_width
                 succ_left_x = _node_x_delete(succ_idx)
@@ -724,8 +723,8 @@ class LinkedListAdapter:
                 if i < len(build_values):
                     value = build_values[i]
                     node_x = start_x + i * node_spacing
-                    node_width = 80
-                    node_height = 40
+                    node_width = 110
+                    node_height = 56
                     
                     # 创建已构建节点的方框
                     node_box = BoxSnapshot(
@@ -796,8 +795,8 @@ class LinkedListAdapter:
                 # 计算新节点的位置（从屏幕上方移动下来）
                 new_x = start_x + build_index * node_spacing
                 new_y = y - 100 + (100 * animation_progress)  # 从上方移动到目标位置
-                node_width = 80
-                node_height = 40
+                node_width = 110
+                node_height = 56
                 
                 # 创建新节点的方框
                 new_node_box = BoxSnapshot(
@@ -869,8 +868,8 @@ class LinkedListAdapter:
             
             if new_value is not None:
                 # 计算新节点的位置（先在上方，然后移动到目标位置）
-                node_width = 80
-                node_height = 40
+                node_width = 110
+                node_height = 56
                 new_x = start_x + insert_position * node_spacing
                 
                 # 调整新节点Y坐标：浮入悬停→末段下落归位
@@ -1244,7 +1243,8 @@ class StackAdapter:
                 id="stack_empty_indicator",
                 value="栈空！",
                 x=stack_start_x - 30 + (box_width + 70) + 14,
-                y=bottom_y,
+                # 上移一行，避免与“栈底”与 top 徽标重叠
+                y=bottom_y - 26,
                 width=0,
                 height=0,
                 color="#00000000",
@@ -1445,32 +1445,25 @@ class BinaryTreeAdapter:
         # 生成边快照
         BinaryTreeAdapter._add_edges(binary_tree.root, positions, snapshot)
         
-        # 显示根指针 - 放在根节点上方
-        root_pointer_x = start_x - 3 # 更贴近根节点
-        root_pointer_y = y - 40
+        # 显示根指针：放在根节点左侧且不与根节点重叠
+        root_pointer_width = 72
+        root_pointer_height = 30
+        horizontal_gap = 60  # 左移更远，避免靠太近
+        root_pointer_x = start_x - (root_pointer_width + horizontal_gap)
+        # 垂直居中对齐根节点
+        root_pointer_y = y - root_pointer_height / 2
         root_pointer_box = BoxSnapshot(
             id="root_pointer",
             value="root",
             x=root_pointer_x,
             y=root_pointer_y,
-            width=72,
-            height=30,
+            width=root_pointer_width,
+            height=root_pointer_height,
             color="#FFD700"  # 金色
         )
         snapshot.boxes.append(root_pointer_box)
         
-        # 添加根指针到根节点的连接
-        if binary_tree.root:
-            root_edge = EdgeSnapshot(
-                from_id="root_pointer",
-                to_id=f"node_{id(binary_tree.root)}",
-                arrow_type="arrow"
-            )
-            root_edge.from_x = root_pointer_x + 30  # 从root标签中心
-            root_edge.from_y = root_pointer_y + 30  # 从root标签底部
-            root_edge.to_x = start_x  # 到根节点中心
-            root_edge.to_y = y - 20  # 到根节点顶部
-            snapshot.edges.append(root_edge)
+        # 不再为 root 徽章添加连线，保持简洁
         
         # 处理创建根节点动画
         if animation_state == 'creating_root':
