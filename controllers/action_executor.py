@@ -107,6 +107,12 @@ class ActionExecutor:
     def _execute_stack(self, operation: str, params: Dict) -> Tuple[bool, str]:
         """执行栈操作"""
         if operation == "create":
+            values = params.get("values")
+            if isinstance(values, list) and len(values) > 0:
+                self.controller.build_stack(",".join(str(v) for v in values))
+                return True, f"已创建栈: {','.join(str(v) for v in values)}"
+            # 无 values：创建空栈（重置）
+            self.controller.clear_stack()
             return True, "已创建空的栈"
         elif operation == "push":
             value = params.get("value")

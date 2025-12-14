@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsEllipseItem, QGraphicsTextItem, QGraphicsLineItem, QGraphicsRectItem
 from PyQt5.QtGui import QBrush, QPen, QColor, QFont, QPainter
-from PyQt5.QtCore import Qt, QPointF, QTimer, QObject
+from PyQt5.QtCore import Qt, QPointF, QTimer, QObject, QRectF
 from controllers.adapters import center_snapshot
 
 NODE_RADIUS = 22
@@ -68,6 +68,11 @@ class Canvas(QObject):
         self.view = QGraphicsView(self.scene)
         # 避免 scene 小于视口时被自动居中导致“上方留白”
         self.view.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+        # 允许滚动条/拖拽平移：当链表过长超出屏幕时可以来回查看全貌
+        self.view.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.view.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.view.setDragMode(QGraphicsView.ScrollHandDrag)
+        self.view.setInteractive(True)
         self.view.setRenderHint(QPainter.Antialiasing, True)
         self.view.setRenderHint(QPainter.TextAntialiasing, True)
         self.view.setRenderHint(QPainter.SmoothPixmapTransform, True)
@@ -122,6 +127,71 @@ class Canvas(QObject):
         # 存储当前快照
         self.current_snapshot = None
 
+        # 滚动时保持说明文字“贴”在当前可视区域的左上/右上
+        try:
+            self.view.horizontalScrollBar().valueChanged.connect(lambda _v: self._layout_labels())
+            self.view.verticalScrollBar().valueChanged.connect(lambda _v: self._layout_labels())
+        except Exception:
+            pass
+
+    def _snapshot_bounds(self, snapshot) -> QRectF:
+        """计算快照中所有可视元素的包围盒（与 center_snapshot 的坐标约定保持一致）"""
+        if snapshot is None:
+            return QRectF()
+        min_x = float("inf")
+        min_y = float("inf")
+        max_x = float("-inf")
+        max_y = float("-inf")
+
+        def include_rect(x0: float, y0: float, w: float, h: float):
+            nonlocal min_x, min_y, max_x, max_y
+            min_x = min(min_x, x0)
+            min_y = min(min_y, y0)
+            max_x = max(max_x, x0 + w)
+            max_y = max(max_y, y0 + h)
+
+        def include_point(x, y):
+            if x is None or y is None:
+                return
+            include_rect(float(x), float(y), 0.0, 0.0)
+
+        for node in getattr(snapshot, "nodes", []) or []:
+            w = getattr(node, "width", None) or 40
+            h = getattr(node, "height", None) or 40
+            include_rect(float(node.x) - w / 2.0, float(node.y) - h / 2.0, float(w), float(h))
+
+        for box in getattr(snapshot, "boxes", []) or []:
+            include_rect(float(box.x), float(box.y), float(box.width), float(box.height))
+
+        for edge in getattr(snapshot, "edges", []) or []:
+            include_point(getattr(edge, "from_x", None), getattr(edge, "from_y", None))
+            include_point(getattr(edge, "to_x", None), getattr(edge, "to_y", None))
+
+        if min_x == float("inf") or min_y == float("inf"):
+            return QRectF()
+        return QRectF(min_x, min_y, max_x - min_x, max_y - min_y)
+
+    def _shift_snapshot(self, snapshot, dx: float, dy: float):
+        """整体平移快照元素（用于把超长链表的左边界拉回到非负区域，便于滚动）"""
+        if snapshot is None or (dx == 0 and dy == 0):
+            return snapshot
+        for node in getattr(snapshot, "nodes", []) or []:
+            node.x += dx
+            node.y += dy
+        for box in getattr(snapshot, "boxes", []) or []:
+            box.x += dx
+            box.y += dy
+        for edge in getattr(snapshot, "edges", []) or []:
+            if hasattr(edge, "from_x") and edge.from_x is not None:
+                edge.from_x += dx
+            if hasattr(edge, "to_x") and edge.to_x is not None:
+                edge.to_x += dx
+            if hasattr(edge, "from_y") and edge.from_y is not None:
+                edge.from_y += dy
+            if hasattr(edge, "to_y") and edge.to_y is not None:
+                edge.to_y += dy
+        return snapshot
+
     # animator proxies
     def animator_play(self): self.animator.play()
     def animator_pause(self): self.animator.pause()
@@ -149,18 +219,24 @@ class Canvas(QObject):
         """布局说明类文字：结构提示左上；步骤说明/比较信息/操作历史依次贴右上"""
         margin_x = 18
         margin_y = 16
-        w = self.view.viewport().width() or self.view.width() or 1280
-        h = self.view.viewport().height() or self.view.height() or 720
+        vw = self.view.viewport().width() or self.view.width() or 1280
+        vh = self.view.viewport().height() or self.view.height() or 720
+
+        # 以“当前可视区域”的左上/右上作为锚点（支持滚动时标签不跑丢）
+        top_left = self.view.mapToScene(0, 0)
+        top_right = self.view.mapToScene(vw, 0)
+        x_left = top_left.x() + margin_x
+        x_right = top_right.x() - margin_x
+        y_top = top_left.y() + margin_y
 
         # 左上：hint（当前数据结构/提示）
         if self.hint_label.toPlainText():
-            self.hint_label.setPos(margin_x, margin_y)
+            self.hint_label.setPos(x_left, y_top)
         else:
-            self.hint_label.setPos(margin_x, margin_y)
+            self.hint_label.setPos(x_left, y_top)
 
         # 右上：步骤说明 -> 比较信息 -> 操作历史，依次向下堆叠
-        x_right = w - margin_x
-        y_cur = margin_y
+        y_cur = y_top
         for item in (self.step_details_label, self.comparison_label, self.operation_history_label):
             txt = item.toPlainText()
             if not txt:
@@ -177,9 +253,18 @@ class Canvas(QObject):
         # 按真实视口尺寸居中，并整体上移一点
         canvas_w = self.view.viewport().width() or self.view.width() or 1280
         canvas_h = self.view.viewport().height() or self.view.height() or 720
-        # 固定 sceneRect 到视口大小，避免 Qt 自动居中 scene 造成额外留白
-        self.scene.setSceneRect(0, 0, canvas_w, canvas_h)
         snapshot = center_snapshot(snapshot, canvas_w, canvas_h, margin=40, bias_y=-160)
+        # 若内容过宽导致左边界变成负数，拉回到非负区域，便于滚动查看
+        bounds = self._snapshot_bounds(snapshot)
+        if not bounds.isNull():
+            dx = 0.0
+            dy = 0.0
+            if bounds.left() < 20:
+                dx = 20 - bounds.left()
+            if bounds.top() < 20:
+                dy = 20 - bounds.top()
+            if dx or dy:
+                snapshot = self._shift_snapshot(snapshot, dx, dy)
         
         # 清除现有内容
         self.clear_scene()
@@ -220,6 +305,28 @@ class Canvas(QObject):
         # 渲染边
         for edge in snapshot.edges:
             self._render_edge(edge)
+
+        # 动态调整 sceneRect：至少覆盖视口；同时覆盖所有内容范围，以支持滚动条
+        try:
+            items_rect = self.scene.itemsBoundingRect()
+        except Exception:
+            items_rect = QRectF()
+        pad = 60
+        if not items_rect.isNull():
+            items_rect = items_rect.adjusted(-pad, -pad, pad, pad)
+        viewport_rect = QRectF(0, 0, canvas_w, canvas_h)
+        scene_rect = viewport_rect.united(items_rect) if not items_rect.isNull() else viewport_rect
+        # 保证 sceneRect 起点不为负，避免滚动到“负坐标空白区”
+        if scene_rect.left() < 0 or scene_rect.top() < 0:
+            scene_rect = QRectF(
+                max(0.0, scene_rect.left()),
+                max(0.0, scene_rect.top()),
+                scene_rect.width(),
+                scene_rect.height(),
+            )
+        self.scene.setSceneRect(scene_rect)
+        # sceneRect 改变后，重新贴边一次标签
+        self._layout_labels()
         
         # 存储当前快照
         self.current_snapshot = snapshot

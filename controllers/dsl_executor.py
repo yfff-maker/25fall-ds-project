@@ -78,7 +78,13 @@ class DSLExecutor:
                 return True, f"已删除位置 {position} 的元素"
             
             elif command.type == CommandType.CREATE_STACK:
-                # 创建空的栈
+                # create stack [with ...]
+                values = command.args.get('values')
+                if values:
+                    self.controller.build_stack(','.join(values))
+                    return True, f"已创建栈: {','.join(values)}"
+                # 未提供 values：重置为空栈
+                self.controller.clear_stack()
                 return True, "已创建空的栈"
             
             elif command.type == CommandType.PUSH_STACK:

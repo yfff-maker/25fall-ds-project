@@ -97,6 +97,136 @@ class MainController(QObject):
         self._current_base_interval: int = 0  # 记录最近一次启动定时器的基准间隔
         
         self._update_snapshot()
+
+    # ========== LLM 上下文：构造更可靠的 prompt 输入 ==========
+    def _build_llm_prompt_context(self) -> List[Dict[str, Any]]:
+        """
+        构造传给 LLM 的上下文。
+        - 基础：self.llm_context_actions（按时间追加的动作历史）
+        - 追加：当前结构的“有效状态 state”（优先用于推断，例如链表的 elements）
+        """
+        base = list(getattr(self, "llm_context_actions", []) or [])
+        state_entry = self._build_llm_state_entry()
+        if state_entry:
+            base.append(state_entry)
+        return base
+
+    def _build_llm_state_entry(self) -> Optional[Dict[str, Any]]:
+        """
+        为当前结构生成一条 operation='state' 的上下文项，尽量反映“视觉上/用户认为”的当前状态。
+        目前重点覆盖 LinkedList（解决“最后一个位置”随插入/删除不更新的问题）。
+        """
+        key = getattr(self, "current_structure_key", None)
+        if not key or key not in getattr(self, "structures", {}):
+            return None
+        try:
+            struct = self.structures[key]
+        except Exception:
+            return None
+
+        # 链表：给出当前有效 elements（包含动画中尚未提交的数据变化）
+        if key == "LinkedList":
+            try:
+                base_elems = []
+                data = getattr(struct, "data", None)
+                if data is not None:
+                    if hasattr(data, "to_array"):
+                        base_elems = list(data.to_array())
+                    else:
+                        base_elems = list(data)
+                state = getattr(struct, "_animation_state", None)
+                effective = list(base_elems)
+
+                # 构建动画：以目标 build_values 为准（更符合用户认知）
+                if state == "building" and hasattr(struct, "_build_values"):
+                    effective = list(getattr(struct, "_build_values") or [])
+                # 插入动画：data 尚未插入，但画面上已经出现新节点 → 反映到 effective
+                elif state == "inserting":
+                    pos = int(getattr(struct, "_insert_position", 0) or 0)
+                    val = getattr(struct, "_new_value", None)
+                    if val is not None:
+                        pos = max(0, min(pos, len(effective)))
+                        effective.insert(pos, val)
+                # 删除动画：data 尚未删除，但画面上该节点已被标记移除 → 反映到 effective
+                elif state == "deleting":
+                    pos = int(getattr(struct, "_delete_position", -1) or -1)
+                    if 0 <= pos < len(effective):
+                        effective.pop(pos)
+
+                return {
+                    "structure_type": "LinkedList",
+                    "operation": "state",
+                    "parameters": {
+                        "elements": [str(x) for x in effective],
+                        "note": "当前链表有效状态（包含动画中未提交的插入/删除变化），用于推断诸如“最后一个位置”等相对位置。",
+                    },
+                }
+            except Exception:
+                return None
+
+        # 顺序表：同样给出当前有效 elements（包含动画中未提交的插入/删除变化）
+        if key == "SequentialList":
+            try:
+                base_elems = []
+                data = getattr(struct, "data", None)
+                if data is not None:
+                    # SequentialArray 支持迭代（__iter__），to_list() 也是生成器
+                    if hasattr(data, "to_list"):
+                        base_elems = list(data.to_list())
+                    else:
+                        base_elems = list(data)
+                state = getattr(struct, "_animation_state", None)
+                effective = list(base_elems)
+
+                if state == "inserting":
+                    pos = int(getattr(struct, "_insert_position", 0) or 0)
+                    val = getattr(struct, "_new_value", None)
+                    if val is not None:
+                        pos = max(0, min(pos, len(effective)))
+                        effective.insert(pos, val)
+                elif state == "deleting":
+                    pos = int(getattr(struct, "_delete_position", -1) or -1)
+                    if 0 <= pos < len(effective):
+                        effective.pop(pos)
+
+                return {
+                    "structure_type": "SequentialList",
+                    "operation": "state",
+                    "parameters": {
+                        "elements": [str(x) for x in effective],
+                        "note": "当前顺序表有效状态（包含动画中未提交的插入/删除变化），用于推断诸如“最后一个位置”等相对位置。",
+                    },
+                }
+            except Exception:
+                return None
+
+        return None
+
+    @staticmethod
+    def _normalize_position_from_user_text(user_input: str, action: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """
+        统一“第N个位置”的口径为 0-based：用户写第N个位置 => action.parameters.position 强制为 N。
+        主要用于避免 LLM 偶尔按 1-based（把第4个位置当 index=3）解读。
+        """
+        if not action or not isinstance(action, dict) or not isinstance(user_input, str):
+            return action
+        params = action.get("parameters", {})
+        if not isinstance(params, dict) or "position" not in params:
+            return action
+
+        try:
+            import re
+            m = re.search(r"第\s*(\d+)\s*个?\s*位置", user_input)
+            if not m:
+                return action
+            pos = int(m.group(1))
+            if pos < 0:
+                return action
+            params["position"] = pos
+            action["parameters"] = params
+            return action
+        except Exception:
+            return action
     
     # ====== 序列化：保存/加载 ======
     def save_to_file(self, path: str) -> None:
@@ -443,12 +573,26 @@ class MainController(QObject):
         try:
             structure = self._get_current_structure()
             if structure and value:
+                # 记录插入发生时的“尾部位置”（等价于 len_before）
+                try:
+                    len_before = len(getattr(structure, "data", []))
+                except Exception:
+                    try:
+                        len_before = int(structure.size())
+                    except Exception:
+                        len_before = None
+
                 structure.insert_at_end(value)
                 self._update_snapshot()
                 self._pending_llm_action = {
                     "structure_type": "LinkedList",
-                    "operation": "insert_tail",
-                    "parameters": {"value": value},
+                    # 统一用 insert，便于 LLM 复原状态
+                    "operation": "insert",
+                    "parameters": (
+                        {"position": int(len_before), "value": value}
+                        if isinstance(len_before, int) and len_before >= 0
+                        else {"value": value}
+                    ),
                 }
                 self.log_operation(f"[链表] 在尾部插入值 {value}")
         except Exception as e:
@@ -459,12 +603,25 @@ class MainController(QObject):
         try:
             structure = self._get_current_structure()
             if structure and value:
+                # 尽量转换为 delete(position)，避免 LLM 不认识 delete_by_value
+                pos = None
+                try:
+                    data = getattr(structure, "data", None)
+                    if data is not None and hasattr(data, "get"):
+                        pos = data.get(value)  # CustomList.get(value) -> index
+                except Exception:
+                    pos = None
+
                 structure.delete_by_value(value)
                 self._update_snapshot()
                 self._pending_llm_action = {
                     "structure_type": "LinkedList",
-                    "operation": "delete_by_value",
-                    "parameters": {"value": value},
+                    "operation": "delete",
+                    "parameters": (
+                        {"position": int(pos)}
+                        if isinstance(pos, int) and pos >= 0
+                        else {"value": value}
+                    ),
                 }
                 self.log_operation(f"[链表] 删除值 {value}")
         except Exception as e:
@@ -829,6 +986,18 @@ class MainController(QObject):
                 
         except Exception as e:
             self._show_error("构建栈失败", str(e))
+
+    def peek_stack(self) -> Optional[str]:
+        """查看当前栈顶元素（不修改栈）"""
+        try:
+            structure = self._get_current_structure()
+            if not structure:
+                return None
+            # 统一用模型的 peek
+            v = structure.peek()
+            return None if v is None else str(v)
+        except Exception:
+            return None
     
     def _update_stack_build_animation(self, structure):
         """更新栈构建动画"""
@@ -1802,11 +1971,18 @@ class MainController(QObject):
                 return False, "未设置OPENROUTER_API_KEY环境变量，请在系统环境变量中设置", None
             
             # 转换为JSON动作
+            ctx_for_prompt = self._build_llm_prompt_context()
+            try:
+                preview = ctx_for_prompt[-3:] if len(ctx_for_prompt) > 3 else ctx_for_prompt
+                print(f"[LLM] context_actions={len(ctx_for_prompt)} tail_preview={preview}")
+            except Exception:
+                pass
             action = self.llm_service.convert_natural_language_to_action(
                 user_input,
                 model=self.get_llm_model(),
-                operations_context=self.llm_context_actions
+                operations_context=ctx_for_prompt
             )
+            action = self._normalize_position_from_user_text(user_input, action)
             
             if action is None:
                 return False, "LLM转换失败，请检查输入是否明确，或尝试手动输入DSL命令", None
@@ -1836,11 +2012,18 @@ class MainController(QObject):
                 return False, "未设置OPENROUTER_API_KEY环境变量，请在系统环境变量中设置", None
             
             # 转换为JSON动作
+            ctx_for_prompt = self._build_llm_prompt_context()
+            try:
+                preview = ctx_for_prompt[-3:] if len(ctx_for_prompt) > 3 else ctx_for_prompt
+                print(f"[LLM] context_actions={len(ctx_for_prompt)} tail_preview={preview}")
+            except Exception:
+                pass
             action = self.llm_service.convert_natural_language_to_action(
                 user_input,
                 model=self.get_llm_model(),
-                operations_context=self.llm_context_actions
+                operations_context=ctx_for_prompt
             )
+            action = self._normalize_position_from_user_text(user_input, action)
             
             if action is None:
                 return False, "LLM转换失败，请检查输入是否明确，或尝试手动输入DSL命令", None

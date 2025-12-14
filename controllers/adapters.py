@@ -1013,26 +1013,30 @@ class StackAdapter:
         # 显示垂直栈（竖着显示）
         stack_start_x = start_x + 200  # 栈在右侧
         stack_start_y = y + 100  # 栈的起始位置（给栈底留空间）
+        step_y = box_height + 2
+
+        # 关键口径：栈底指示器位置固定（不随动画/元素数量移动）
+        # 元素从栈底上方开始向上堆叠：第一个元素（栈底元素）在 bottom_indicator 上方
+        bottom_y = stack_start_y + 5
+        bottom_element_top_y = bottom_y - 6 - box_height  # 与栈底指示器留 6px 间距
         
         # 动态绘制：只绘制实际存在的元素
         if stack_size > 0:
             # 获取栈内容并转换为列表（从栈底到栈顶的顺序）
             stack_list = stack.data.to_array()  # 使用to_array方法获取正确的顺序
+            # 出栈动画中：栈顶元素由 pop_node 单独渲染，避免与静态栈顶重叠
+            if animation_state == 'popping' and getattr(stack, '_pop_value', None) is not None and len(stack_list) > 0:
+                stack_list = stack_list[:-1]
             
-            # 显示栈中的元素（从下往上堆叠）
-            # stack_list是从栈底到栈顶的顺序
-            # stack_list[0]是栈底，应该显示在最下面
-            # stack_list[-1]是栈顶，应该显示在最上面
+            # 显示栈中的元素：栈底固定在 bottom_element_top_y，向上增长（新元素落到更上方）
             for i, value in enumerate(stack_list):
-                # 计算元素在栈中的位置（从下往上）
-                # 栈底元素（i=0）应该在最下面
-                # 栈顶元素（i=len-1）应该在最上面
-                stack_position = stack_size - 1 - i
+                # i=0 为栈底，y 最大（靠下）；i 越大越靠上
+                stack_position_from_bottom = i
                 stack_box = BoxSnapshot(
                     id=f"stack_box_{i}",
                     value=str(value),
                     x=stack_start_x,
-                    y=stack_start_y + stack_position * (box_height + 2),
+                    y=bottom_element_top_y - stack_position_from_bottom * step_y,
                     width=box_width,
                     height=box_height,
                     color="#4C78A8",  # 蓝色
@@ -1040,14 +1044,7 @@ class StackAdapter:
                 )
                 snapshot.boxes.append(stack_box)
         
-        # 添加栈底指示器（动态位置）
-        if stack_size > 0:
-            # 栈底位置在最后一个元素下方
-            bottom_y = stack_start_y + stack_size * (box_height + 2) + 5
-        else:
-            # 栈空时，栈底在起始位置下方
-            bottom_y = stack_start_y + 5
-            
+        # 添加栈底指示器（固定位置）
         bottom_box = BoxSnapshot(
             id="bottom_indicator",
             value="栈底",
@@ -1062,9 +1059,11 @@ class StackAdapter:
         # 添加top指针指示器（指向当前栈顶位置）
         # 在动画过程中，top指针需要跟随栈顶元素移动
         if stack_size > 0:
-            # top指向栈顶元素的位置
-            # 栈顶元素的位置是 stack_start_y + 0 * (box_height + 2)
-            top_y = stack_start_y + box_height // 2
+            # 栈顶元素（静态栈）位于：bottom_element_top_y - (stack_size-1)*step_y
+            # 出栈动画时静态栈顶已隐藏（stack_list[:-1]），但 top 徽章仍指向“当前栈顶”（弹出前）
+            top_element_top_y = bottom_element_top_y - (stack_size - 1) * step_y
+            # 视觉口径：top 徽章的“上边”与栈顶元素方框的“上边”对齐，并略微上移一点
+            top_y = top_element_top_y - 2
         else:
             # 栈空时，将 top 水平放在“栈底”右侧并与其对齐
             top_y = bottom_y
@@ -1074,11 +1073,12 @@ class StackAdapter:
             new_value = getattr(stack, '_new_value', None)
             animation_progress = getattr(stack, '_animation_progress', 0.0)
             if new_value is not None:
-                # 计算新元素的目标位置（栈顶位置）
-                target_y = stack_start_y + box_height // 2
+                # 入栈后新的栈顶位置（新元素会成为新的栈顶，落到更上方）
+                # 若当前已有 n 个元素，新栈顶位于 bottom_element_top_y - n*step_y
+                target_y = (bottom_element_top_y - stack_size * step_y) - 2
                 
-                # 计算起始位置（屏幕正上方）
-                start_y = 50 + box_height // 2  # 屏幕正上方
+                # 计算起始位置：永远从目标位置“上方”开始，保证动画方向是从上往下压入
+                start_y = float(target_y) - 180.0
                 
                 # 计算新元素的当前位置
                 new_element_y = start_y + (target_y - start_y) * animation_progress
@@ -1108,69 +1108,68 @@ class StackAdapter:
         # 如果正在构建动画，显示逐步构建过程
         if animation_state == 'building':
             build_values = getattr(stack, '_build_values', [])
-            build_index = getattr(stack, '_build_index', 0)
             animation_progress = getattr(stack, '_animation_progress', 0.0)
             
-            # 显示已经构建完成的元素
-            for i in range(build_index):
-                if i < len(build_values):
+            # “一个接一个落下”的视觉逻辑：
+            # - 栈底固定：第一个元素落到 bottom_element_top_y
+            # - 后续元素依次落到更上方（bottom_element_top_y - k*step_y）
+            total = len(build_values)
+            if total > 0:
+                t = max(0.0, float(animation_progress) or 0.0) * total
+                k = int(t)  # 当前正在落下的元素索引
+                if k >= total:
+                    k = total - 1
+                    local = 1.0
+                else:
+                    local = t - k  # [0,1)
+
+                built_count = k  # 已经完全落入并就位的数量
+                # 已就位元素：栈底在 bottom_element_top_y，上方逐层叠加
+                for i in range(built_count):
                     value = build_values[i]
-                    # 计算元素在栈中的位置（从下往上）
-                    stack_position = build_index - 1 - i
-                    stack_box = BoxSnapshot(
+                    snapshot.boxes.append(BoxSnapshot(
                         id=f"built_stack_box_{i}",
                         value=str(value),
                         x=stack_start_x,
-                        y=stack_start_y + stack_position * (box_height + 2),
+                        y=bottom_element_top_y - i * step_y,
                         width=box_width,
                         height=box_height,
-                        color="#4C78A8",  # 蓝色
-                        text_color="#FFFFFF"
-                    )
-                    snapshot.boxes.append(stack_box)
-            
-            # 显示正在构建的元素（从上方掉下来）
-            if build_index < len(build_values):
-                new_value = build_values[build_index]
-                # 计算目标位置（栈顶位置）
-                target_position = build_index
-                target_x = stack_start_x
-                target_y = stack_start_y + target_position * (box_height + 2)
-                
-                # 计算起始位置（屏幕正上方）
-                start_x_pos = target_x
-                start_y_pos = 50  # 屏幕正上方
-                
-                # 使用线性插值计算当前位置
-                current_x = start_x_pos + (target_x - start_x_pos) * animation_progress
-                current_y = start_y_pos + (target_y - start_y_pos) * animation_progress
-                
-                new_node = BoxSnapshot(
+                        color="#4C78A8",
+                        text_color="#FFFFFF",
+                    ))
+
+                # 当前正在落下的元素 k：落到自己的目标层（bottom_element_top_y - k*step_y）
+                cur_value = build_values[k]
+                target_y = bottom_element_top_y - k * step_y
+                # 起始位置：永远在目标上方，保证从上往下落
+                start_y_pos = float(target_y) - 220.0
+                current_y = start_y_pos + (target_y - start_y_pos) * local
+                snapshot.boxes.append(BoxSnapshot(
                     id="building_node",
-                    value=str(new_value),
-                    x=current_x,
+                    value=str(cur_value),
+                    x=stack_start_x,
                     y=current_y,
                     width=box_width,
                     height=box_height,
-                    color="#FF6B6B"  # 红色表示正在移动的节点
-                )
-                snapshot.boxes.append(new_node)
+                    color="#FF6B6B",
+                    text_color="#FFFFFF",
+                ))
         
         # 如果正在入栈动画，显示新节点从外部掉入栈顶
         elif animation_state == 'pushing':
             new_value = getattr(stack, '_new_value', None)
             animation_progress = getattr(stack, '_animation_progress', 0.0)
             if new_value is not None:
-                # 计算目标位置（栈顶位置）
+                # 计算目标位置（新的栈顶位置，位于现有栈顶的上方一格）
                 target_x = stack_start_x
-                target_y = stack_start_y
+                target_y = bottom_element_top_y - stack_size * step_y
                 
                 # 设置目标位置到栈对象
                 stack.set_animation_target(target_x, target_y)
                 
-                # 计算起始位置（屏幕正上方）
+                # 计算起始位置：永远从目标位置“上方”开始，保证从上往下压入
                 start_x = stack_start_x
-                start_y = 50  # 屏幕正上方
+                start_y = float(target_y) - 220.0
                 
                 # 使用线性插值计算当前位置
                 current_x = start_x + (target_x - start_x) * animation_progress
@@ -1184,6 +1183,7 @@ class StackAdapter:
                     width=box_width,
                     height=box_height,
                     color="#FF6B6B"  # 红色表示正在移动的节点
+                    ,text_color="#FFFFFF"
                 )
                 snapshot.boxes.append(new_node)
         
@@ -1193,13 +1193,12 @@ class StackAdapter:
             animation_progress = getattr(stack, '_animation_progress', 0.0)
             if pop_value is not None:
                 # 计算起始位置（栈顶位置）
-                start_position = stack_size - 1
                 start_x = stack_start_x
-                start_y = stack_start_y + start_position * (box_height + 2)
+                start_y = bottom_element_top_y - (stack_size - 1) * step_y
                 
-                # 计算目标位置（向上弹出）
+                # 计算目标位置：永远在起始位置上方，保证从下往上弹出（与入栈从上往下相反）
                 target_x = stack_start_x
-                target_y = 50  # 屏幕正上方
+                target_y = float(start_y) - 220.0
                 
                 # 使用线性插值计算当前位置
                 current_x = start_x + (target_x - start_x) * animation_progress
@@ -1213,6 +1212,7 @@ class StackAdapter:
                     width=box_width,
                     height=box_height,
                     color="#FF6B6B"  # 红色
+                    ,text_color="#FFFFFF"
                 )
                 snapshot.boxes.append(pop_node)
         
@@ -2116,10 +2116,10 @@ class HuffmanTreeAdapter:
             value=_fmt_int(freq),
             x=x,
             y=y,
-            node_type="circle",
+                    node_type="circle",
             width=diameter,
             height=diameter,
-            color=color,
+                    color=color,
             text_color=text_color,
             sub_label=label,
             sub_label_color="#1f4e79",
@@ -2329,8 +2329,8 @@ class HuffmanTreeAdapter:
 
         def draw_subtree(node, cx, cy, root_color, scale=1.0, level_h=120, node_w=72, spacing=130):
             """在队列位置绘制一棵子树（与初始节点等大）"""
-            if not node:
-                return
+        if not node:
+            return
             mini_pos = HuffmanTreeAdapter._layout_tree(node, cx, cy, level_h=level_h, node_w=node_w, min_spacing=spacing)
             radii = {}
             for nd, (nx, ny) in mini_pos.items():

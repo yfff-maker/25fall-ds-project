@@ -92,7 +92,11 @@ class LLMService:
                 raise ValueError(f"API响应格式异常: {result}")
             
             # 解析JSON
-            action = json.loads(content)
+            try:
+                action = json.loads(content)
+            except json.JSONDecodeError:
+                # 兜底：有时模型会输出解释文字+JSON，这里尝试抽取第一个 JSON 对象
+                action = self._extract_first_json_object(content)
             
             return action
             
@@ -140,7 +144,8 @@ class LLMService:
    - delete: {"structure_type": "LinkedList", "operation": "delete", "parameters": {"position": 2}}
 
 3. Stack (栈):
-   - create: {"structure_type": "Stack", "operation": "create", "parameters": {}}
+   - create(空栈): {"structure_type": "Stack", "operation": "create", "parameters": {}}
+   - create(非空栈): {"structure_type": "Stack", "operation": "create", "parameters": {"values": ["10","20","30"]}}
    - push: {"structure_type": "Stack", "operation": "push", "parameters": {"value": "100"}}
    - pop: {"structure_type": "Stack", "operation": "pop", "parameters": {}}
 
@@ -168,6 +173,16 @@ class LLMService:
 - 对于二叉树插入，position可以是"left"或"right"
 - 只返回JSON对象，不要包含其他文本
 
+位置口径统一（非常重要）：
+- “第N个位置”一律按 **从0开始的下标** 解释，也就是 JSON 中必须写成 `"position": N`，不要做 N-1。
+  - 例：“在链表第0个位置插入5” -> position=0（插入到最前）
+  - 例：“在链表第4个位置插入25” -> position=4（插入后它会成为从1开始数的第5个元素）
+  - 例：“删除第4个位置的元素” -> position=4
+
+上下文推断规则（非常重要）：
+- 你会收到“已经执行过的操作历史”（JSON数组，按先后顺序）。你必须按顺序应用这些操作来推断当前状态，不要只看最后一次 create。
+- 操作历史末尾可能包含一条 operation="state" 的记录（例如 LinkedList 的 parameters.elements），它表示当前结构的“有效状态”（可能包含动画中尚未提交的插入/删除变化）。若存在，优先以 state 为准推断“最后一个位置/末尾”等相对位置。
+
 示例：
 用户输入："创建一个包含数据元素[5,3,7,2,4]的二叉搜索树"
 应返回：{"structure_type": "BST", "operation": "create", "parameters": {"values": ["5","3","7","2","4"]}}
@@ -190,4 +205,23 @@ class LLMService:
         else:
             context_block = ""
         return base_prompt + context_block
+
+    @staticmethod
+    def _extract_first_json_object(text: str) -> Dict[str, Any]:
+        """
+        从包含杂散文本的内容中提取第一个 JSON 对象。
+        适配：模型输出“解释 + JSON”导致 json.loads 失败的情况。
+        """
+        decoder = json.JSONDecoder()
+        if not isinstance(text, str):
+            raise json.JSONDecodeError("content is not str", str(text), 0)
+        for i, ch in enumerate(text):
+            if ch == "{":
+                try:
+                    obj, _end = decoder.raw_decode(text[i:])
+                    if isinstance(obj, dict):
+                        return obj
+                except json.JSONDecodeError:
+                    continue
+        raise json.JSONDecodeError("No JSON object found", text, 0)
 

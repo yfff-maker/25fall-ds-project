@@ -96,7 +96,7 @@ class DSLParser:
         
         # 栈
         CommandType.CREATE_STACK: re.compile(
-            r'create\s+stack$',
+            r'create\s+stack(?:\s+with\s+(.+))?$',
             re.IGNORECASE
         ),
         CommandType.PUSH_STACK: re.compile(
@@ -256,8 +256,12 @@ class DSLParser:
             args['position'] = int(match.group(1))
             
         elif cmd_type == CommandType.CREATE_STACK:
-            # create stack
-            args = {}
+            # create stack [with 1,2,3]
+            values_str = (match.group(1) or "").strip()
+            if values_str:
+                args['values'] = [v.strip() for v in values_str.split(',') if v.strip() != ""]
+            else:
+                args = {}
             
         elif cmd_type == CommandType.PUSH_STACK:
             # push 100 to stack

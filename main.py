@@ -519,12 +519,18 @@ class MainWindow(QMainWindow):
             lay.addWidget(input_line)
             b1 = QPushButton("Push")
             b1.clicked.connect(lambda: self.controller.push_stack(get_value()))
+            b_peek = QPushButton("Peek")
+            def do_peek():
+                top = self.controller.peek_stack()
+                if top is None or str(top).strip() == "":
+                    QMessageBox.information(self, "Peek", "当前栈为空（没有栈顶元素）。")
+                else:
+                    QMessageBox.information(self, "Peek", f"当前栈顶元素为：{top}")
+            b_peek.clicked.connect(do_peek)
             b2 = QPushButton("Pop")
             b2.clicked.connect(lambda: self.controller.pop_stack())
-            b3 = QPushButton("Clear Stack")
-            b3.clicked.connect(lambda: self.controller.clear_stack())
-            lay.addWidget(b1); lay.addWidget(b2); lay.addWidget(b3)
-            self._mark_secondary(b2, b3)
+            lay.addWidget(b1); lay.addWidget(b_peek); lay.addWidget(b2)
+            self._mark_secondary(b_peek, b2)
 
         elif key == "BinaryTree":
             lay.addWidget(input_line)
