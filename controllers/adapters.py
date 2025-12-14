@@ -275,27 +275,7 @@ class SequentialListAdapter:
             )
             snapshot.boxes.append(index_label)
         
-        # 添加当前长度指示器
-        if list_size > 0:
-            # 计算最后一个元素的位置（适应换行布局）
-            last_element_index = list_size - 1
-            last_row = last_element_index // elements_per_row
-            last_col = last_element_index % elements_per_row
-            
-            last_element_x = array_start_x + last_col * box_width
-            last_element_y = array_start_y + last_row * (box_height + row_gap)
-            
-            # 高亮当前最后一个元素位置
-            length_box = BoxSnapshot(
-                id="length_indicator",
-                value="LEN",
-                x=last_element_x,
-                y=last_element_y + box_height + 5,
-                width=box_width,
-                height=25,
-                color="#FF6B6B"  # 红色
-            )
-            snapshot.boxes.append(length_box)
+        # 移除长度红色徽章（不再绘制 length_indicator）
         
         # 如果正在插入动画，显示新节点平滑移动到目标位置和元素后移效果
         animation_state = getattr(sequential_list, '_animation_state', None)

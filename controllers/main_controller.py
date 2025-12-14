@@ -1474,8 +1474,15 @@ class MainController(QObject):
     def _parse_frequency_mapping(self, text: str) -> dict:
         """解析频率映射"""
         freq = {}
-        if text.strip():
-            for pair in text.split(","):
+        raw = (text or "").strip()
+        if raw:
+            # 兼容用户直接输入 DSL 形式：build huffman with a:5,b:9...
+            # 避免把 "build huffman with a" 当作字符 key
+            import re
+            raw = re.sub(r"^\s*build\s+huffman\s+with\s+", "", raw, flags=re.IGNORECASE)
+            raw = re.sub(r"^\s*create\s+huffman\s+with\s+", "", raw, flags=re.IGNORECASE)
+
+            for pair in raw.split(","):
                 pair = pair.strip()
                 if ":" in pair:
                     k, v = pair.split(":", 1)

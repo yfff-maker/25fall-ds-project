@@ -12,7 +12,7 @@ class ControlPanel(QDockWidget):
     speedChanged = pyqtSignal(float)
 
     def __init__(self, parent=None):
-        super().__init__("算法控制", parent)
+        super().__init__("动画控制", parent)
         w = QWidget()
         lay = QHBoxLayout(w)
         self.btn_play = QPushButton("播放")

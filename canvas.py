@@ -243,13 +243,18 @@ class Canvas(QObject):
         # 使用text_color参数，如果没有则使用默认颜色
         text_color = getattr(box, 'text_color', '#000000')
         label.setDefaultTextColor(QColor(text_color))
-        # 下标（index_）字号更小：约为原来的 1/2；其它保持不变
+        # 下标（index_）字号更小；特定徽章（top/栈底/root）缩小以避免拥挤
         font = QFont("Segoe UI", 13)
         box_id = getattr(box, "id", "")
         if box_id.startswith("index_"):
             font.setPointSize(7)
         elif box_id.startswith("balance_"):
             font.setPointSize(9)
+        elif box_id in ("top_indicator", "bottom_indicator", "root_pointer"):
+            font.setPointSize(11)
+        elif box_id.startswith("code_badge_"):
+            # Huffman 叶子编码徽章：缩小字号，避免二进制溢出方框
+            font.setPointSize(10)
         font.setWeight(QFont.Medium)
         label.setFont(font)
         # 居中显示文本
