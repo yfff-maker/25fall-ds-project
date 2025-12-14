@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "current_structure_key": "BST",
+  "current_structure_key": "LinkedList",
   "structures": {
     "SequentialList": {
       "elements": [],
@@ -11,7 +11,8 @@
         "10",
         "15",
         "30",
-        "40"
+        "40",
+        "90"
       ]
     },
     "Stack": {
@@ -47,7 +48,11 @@
           "right": {
             "value": 80.0,
             "left": null,
-            "right": null
+            "right": {
+              "value": 90.0,
+              "left": null,
+              "right": null
+            }
           }
         }
       }

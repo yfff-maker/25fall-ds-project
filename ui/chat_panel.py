@@ -14,9 +14,10 @@ class ChatPanel(QWidget):
     sendMessage = pyqtSignal(str)
     modelChanged = pyqtSignal(str)
     _DEFAULT_MODELS = [
+        # 保留 gpt-3.5 作为基础选项，其余换成更智能的新模型
         "openai/gpt-3.5-turbo",
-        "openai/gpt-4o-mini",
-        "anthropic/claude-3-haiku"
+        "openai/gpt-4o",
+        "anthropic/claude-3.5-sonnet"
     ]
 
     def __init__(self, parent=None):
@@ -148,7 +149,7 @@ class ChatPanel(QWidget):
 
     def _init_model_combo(self):
         """初始化模型选项"""
-        default_model = "openai/gpt-3.5-turbo"  # 默认固定为 gpt-3.5
+        default_model = "openai/gpt-3.5-turbo"  # 默认保持 gpt-3.5，兼顾通用性
         env_model = os.getenv("OPENROUTER_MODEL")
         models = list(dict.fromkeys([default_model, env_model] + self._DEFAULT_MODELS)) if env_model else self._DEFAULT_MODELS
         self.model_combo.addItems(models)
