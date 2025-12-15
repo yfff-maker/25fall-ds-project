@@ -137,6 +137,10 @@ class ActionExecutor:
             position = params.get("position")  # left or right
             self.controller.insert_binary_tree_with_position(value, parent_value, position)
             return True, f"已在节点 {parent_value} 的{position}侧插入 {value}"
+        elif operation == "delete":
+            value = params.get("value")
+            self.controller.delete_binary_tree(value)
+            return True, f"已删除二叉树节点: {value}"
         else:
             return False, f"不支持的操作: {operation}"
     

@@ -1,0 +1,122 @@
+{
+  "version": 1,
+  "current_structure_key": "AVL",
+  "structures": {
+    "SequentialList": {
+      "elements": [
+        "1",
+        "2",
+        "6",
+        "7",
+        "10"
+      ],
+      "capacity": 100
+    },
+    "LinkedList": {
+      "elements": [
+        "10",
+        "15",
+        "28",
+        "30",
+        "40"
+      ]
+    },
+    "Stack": {
+      "elements": [
+        "20",
+        "30",
+        "50"
+      ],
+      "capacity": 100
+    },
+    "BinaryTree": {
+      "root": {
+        "value": "10",
+        "left": {
+          "value": "12",
+          "left": {
+            "value": "14",
+            "left": null,
+            "right": null
+          },
+          "right": {
+            "value": "15",
+            "left": null,
+            "right": null
+          }
+        },
+        "right": null
+      }
+    },
+    "BST": {
+      "root": {
+        "value": 20.0,
+        "left": null,
+        "right": {
+          "value": 55.0,
+          "left": {
+            "value": 25.0,
+            "left": null,
+            "right": null
+          },
+          "right": {
+            "value": 60.0,
+            "left": null,
+            "right": {
+              "value": 70.0,
+              "left": null,
+              "right": {
+                "value": 80.0,
+                "left": null,
+                "right": null
+              }
+            }
+          }
+        }
+      }
+    },
+    "AVL": {
+      "root": {
+        "value": 8.0,
+        "left": {
+          "value": 5.0,
+          "left": {
+            "value": 3.0,
+            "left": null,
+            "right": null,
+            "height": 1
+          },
+          "right": {
+            "value": 6.0,
+            "left": null,
+            "right": null,
+            "height": 1
+          },
+          "height": 2
+        },
+        "right": {
+          "value": 9.0,
+          "left": null,
+          "right": {
+            "value": 14.0,
+            "left": null,
+            "right": null,
+            "height": 1
+          },
+          "height": 2
+        },
+        "height": 3
+      }
+    },
+    "HuffmanTree": {
+      "freq_map": {
+        "a": 5,
+        "b": 9,
+        "c": 12,
+        "d": 13,
+        "e": 16,
+        "f": 45
+      }
+    }
+  }
+}

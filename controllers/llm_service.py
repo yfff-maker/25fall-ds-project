@@ -152,6 +152,7 @@ class LLMService:
 4. BinaryTree (二叉树):
    - create: {"structure_type": "BinaryTree", "operation": "create", "parameters": {"values": ["1","2","3","4","5"]}}
    - insert: {"structure_type": "BinaryTree", "operation": "insert", "parameters": {"value": "6", "parent_value": "3", "position": "left"}}
+   - delete: {"structure_type": "BinaryTree", "operation": "delete", "parameters": {"value": "13"}}
 
 5. BST (二叉搜索树):
    - create: {"structure_type": "BST", "operation": "create", "parameters": {"values": ["50","30","70"]}}
